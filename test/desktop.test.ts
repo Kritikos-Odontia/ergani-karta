@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { startErganiFake, type ErganiFake } from './fake/ergani-fake.js';
 import { AFM } from './fixtures/people.js';
-import { VERSION } from '../src/version.js';
+import { RELEASES_PAGE, VERSION } from '../src/version.js';
 import { PORT_TAKEN } from '../src/update/versions.js';
 
 /**
@@ -209,6 +209,13 @@ describe('ergani desktop — from an empty folder to a working page', () => {
     const updates = await (await get('/updates', { cookie: again })).text();
     expect(updates).toContain(`Έκδοση: <strong>${VERSION}</strong>`);
     expect(updates).toMatch(/id="night" name="night" value="on" checked/);
+    // A newer release on another Node.js: here (not Windows) an update like any other — the button, no installer note.
+    const state = readFileSync(join(data, 'desktop.json'), 'utf8');
+    writeFileSync(join(data, 'desktop.json'), JSON.stringify({ ...JSON.parse(state), update: { checkedIso: new Date().toISOString(), ok: true, available: '99.0.0', releaseNode: '99.0.0' } }), { mode: 0o600 });
+    const offered = await (await get('/updates', { cookie: again })).text();
+    expect(offered).toContain('Ενημέρωση τώρα</button>');
+    expect(offered).not.toContain(RELEASES_PAGE);
+    writeFileSync(join(data, 'desktop.json'), state, { mode: 0o600 });
 
     // A version that cannot start on probation ends with an error — so the launcher undoes the switch — and files
     // nothing: its staff page never opened.

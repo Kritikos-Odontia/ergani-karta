@@ -60,13 +60,34 @@ with it.
   taken).
 - **Plain HTTP on the practice network.** Phones reach the staff page over the local network without TLS: the practice's
   own WPA2/WPA3 Wi-Fi only, never a guest or public network (the setup refuses a public address). On Windows the
-  installer's rules name the program every version runs on (the installed Node.js): port 8880 open on private networks
-  from the local network only, closed on public ones — so a Wi-Fi that Windows calls «Public» must be made «Private»
+  installer's rules name the program every version runs on (the installed Node.js): port 8880 open on private (and
+  domain) networks from the local network only, closed on public ones — so a Wi-Fi that Windows calls «Public» must be made «Private»
   for phones; a page set to another port is not opened for phones.
-- **On Windows, a release on a new Node.js comes as a new installer.** Windows' firewall knows a program by its path;
-  every version runs on the installed Node.js, and the rules are made for it at install. An update that brings another
-  Node.js would run from a new path and be blocked until someone allows it — so such a release is not installed by an
-  update there (the «Ενημερώσεις» page says so); the new installer brings it.
+- **On Windows, Node.js itself is updated by the installer.** Windows' firewall knows a program by its path, so every
+  version runs on the installed Node.js whenever it was made for its line (the same major version), and the rules are
+  made for it at install. An update within the line runs on the installed Node.js — its Node.js fixes arrive with the
+  newer installer, not with the update, and the «Ενημερώσεις» page says so, with the link, whenever a newer one exists.
+  CI therefore also runs on the oldest Node.js an installer shipped (packaging/node.json `oldestShipped`). A release on a new Node.js line would run from a new path and be blocked until
+  someone allows it — so it is not installed by an update there: the «Ενημερώσεις» page says so and links the page with
+  the new installer, which brings it.
+- **On Windows, going back across a Node.js line.** If a version brought by an installer of a NEW Node.js line fails its
+  probation or later keeps stopping at start, the program goes back to the version before — which cannot run on the new
+  line, so it runs on its own copy of the older one, from a path the firewall rules do not name: Windows may ask «allow
+  this app?», and phones cannot reach the staff page until someone with an administrator's password allows it for
+  private networks (the reception computer keeps working). Rare — a new Node.js line, by installer, and a failure — and
+  open. The easy way out is «Ενημέρωση τώρα» (or the next release of the new line): it runs from the installed path
+  again. Running that same installer again does not help (a version that failed is not retried by an installer). The
+  same holds for an OLDER installer run over a version of a newer line: that version keeps running, on its own copy. Going back within a line runs on the installed Node.js, like everything else — the version gone back to
+  then runs on a newer Node.js of its line than it was made for. That is Node.js's promise for its stable parts; the
+  program's record store uses `node:sqlite`, which Node.js still marks as in development, so a release that changes
+  Node.js is tested with the version before it too, and a failure at start is undone by the probation as always.
+- **A downloaded installer is not checked against the project's key.** An update is installed only when it verifies against
+  the project's key; an installer the owner downloads from the release page (the first install, or a new Node.js line)
+  is run like any download — the release's signed list covers it, but nothing compares the two for the owner.
+- **The installer resets the inbound firewall rules for its own program.** At install and uninstall it removes every
+  inbound rule for exactly its `node.exe` (and for older per-version copies) before adding its own two — rules Windows
+  made by itself, and any an administrator added by hand for that program. Outbound rules are left alone. Its allow rule
+  covers private and DOMAIN networks (a domain network is a managed workplace network, never a guest one).
 - **Night updates need the computer on at night.** A computer switched off every evening never updates by itself; the
   owner's «Ενημέρωση τώρα» does it. A version that rolled back is not tried again by itself.
 - **The rollback covers the probation.** A new version is undone, stores and all, only while it has filed nothing — up to

@@ -9,9 +9,9 @@ import { z } from 'zod';
 import type { DesktopPaths } from '../desktop/paths.js';
 import { readDesktopState, writeDesktopState, type UpdateRecord } from '../desktop/state.js';
 import { athensTime } from '../stamp/athens.js';
-import { REPOSITORY, VERSION } from '../version.js';
+import { RELEASES_PAGE, REPOSITORY, VERSION } from '../version.js';
 import { UPDATE_KEYS, newer, thisSystem, verifiedRelease, type VerifiedRelease } from './release.js';
-import { RESTART, binaryName, readRollback, snapshotStores, versionDir, writeMark, writePending } from './versions.js';
+import { RESTART, binaryName, readRollback, runsOnInstalled, snapshotStores, versionDir, writeMark, writePending } from './versions.js';
 
 /**
  * THE UPDATER — inside the program, when the launcher runs it (launcher.ts). His ruling: updates through the
@@ -67,6 +67,7 @@ export class Updater {
   readonly #o: UpdaterOptions;
   readonly #api: string;
   readonly #version: string;
+  readonly #installedNode: string;
   readonly #fetch: typeof fetch;
   #busy = false;
   #lastInstallTryMs = 0;
@@ -76,6 +77,8 @@ export class Updater {
     this.#o = o;
     this.#api = o.api ?? API;
     this.#version = o.version ?? VERSION;
+    // The launcher says which Node.js is installed (the version may run on its own copy of another one).
+    this.#installedNode = o.installedNode ?? o.env['KARTA_INSTALLED_NODE'] ?? process.versions.node;
     this.#fetch = o.fetch ?? fetch;
   }
 
@@ -100,6 +103,29 @@ export class Updater {
     return found !== undefined && newer(found, this.#version) ? found : undefined;
   }
 
+  get installedNode(): string {
+    return this.#installedNode;
+  }
+
+  /**
+   * Whether the newer version the last check found comes as a new installer here (Windows, another Node.js line) —
+   * judged when asked, against the Node.js installed NOW: an installer run since the check may have brought that line.
+   */
+  needsInstaller(): boolean {
+    const node = this.record()?.releaseNode;
+    return this.available() !== undefined && node !== undefined && this.#needsInstaller(node);
+  }
+
+  /**
+   * Windows: the newest release was made for a NEWER Node.js of the installed line. It runs on the installed one, so
+   * that Node.js's fixes come only with the newer installer — the Node.js it brings, for the «Ενημερώσεις» page to say.
+   */
+  nodeByInstaller(): string | undefined {
+    const node = this.record()?.releaseNode;
+    if (node === undefined || this.#platform !== 'win32' || this.#needsInstaller(node) || !newer(node, this.#installedNode)) return undefined;
+    return node;
+  }
+
   /** Every ten minutes: the daily check when due, and at night the install. */
   start(): void {
     this.#timer = setInterval(() => void this.tick().catch((e: unknown) => this.#o.log(`update: ${message(e)}`)), 10 * 60_000);
@@ -117,7 +143,7 @@ export class Updater {
     if (since >= DAY_MS || (record?.ok === false && since >= HOUR_MS)) await this.check();
     const available = this.available();
     if (readDesktopState(this.#o.paths.desktop)?.nightUpdates !== true || available === undefined || !nightWindow(now)) return;
-    if (readRollback(this.#o.paths.versions)?.failed === available) return;
+    if (readRollback(this.#o.paths.versions)?.failed === available || this.needsInstaller()) return;
     if (now - this.#lastInstallTryMs < HOUR_MS || !this.#o.quiet(now, HOUR_MS)) return;
     this.#lastInstallTryMs = now;
     this.#o.log(`update: installing ${available} (night)`);
@@ -146,7 +172,7 @@ export class Updater {
     try {
       const release = await this.#newest();
       const available = release !== undefined && newer(release.verified.manifest.version, this.#version) ? release.verified.manifest.version : undefined;
-      found = { checkedIso, ok: true, ...(available === undefined ? {} : { available }) };
+      found = { checkedIso, ok: true, ...(available === undefined ? {} : { available }), ...(release === undefined ? {} : { releaseNode: release.verified.manifest.node }) };
       this.#o.log(`update check: ${available === undefined ? 'up to date' : `${available} available`}`);
     } catch (error) {
       found = { checkedIso, ok: false, problem: message(error) };
@@ -185,11 +211,8 @@ export class Updater {
     try {
       const release = await this.#newest();
       if (release === undefined || !newer(release.verified.manifest.version, this.#version)) return 'δεν υπάρχει νεότερη έκδοση';
-      // Windows knows the program by its path: a version on another Node.js would run on a new path, and the firewall
-      // would block the staff page until someone allows it (launcher.ts runtimeFor). Such a release comes as a new
-      // installer, which brings that Node.js to the installed place, and the rule with it.
-      if ((this.#o.platform ?? process.platform) === 'win32' && release.verified.manifest.node !== (this.#o.installedNode ?? process.versions.node)) {
-        return `η έκδοση ${release.verified.manifest.version} φέρνει νέο Node.js: εγκαταστήστε τη με το νέο πρόγραμμα εγκατάστασης από τη σελίδα του έργου`;
+      if (this.#needsInstaller(release.verified.manifest.node)) {
+        return `η έκδοση ${release.verified.manifest.version} φέρνει νέα σειρά Node.js: εγκαταστήστε τη με το νέο πρόγραμμα εγκατάστασης — ${RELEASES_PAGE}`;
       }
       const notNow = this.#mayStop(by);
       if (notNow !== undefined) return notNow;
@@ -206,6 +229,19 @@ export class Updater {
       this.#o.log(`update failed — ${problem}`);
       return problem;
     }
+  }
+
+  /**
+   * Windows knows the program by its path: a version that cannot run on the installed runtime would run on a new path,
+   * and the firewall would block the staff page until someone allows it (launcher.ts runtimeFor). Such a release — a
+   * new Node.js line — comes as a new installer, which brings that Node.js to the installed place, and the rule with it.
+   */
+  #needsInstaller(node: string): boolean {
+    return this.#platform === 'win32' && !runsOnInstalled(node, this.#installedNode, this.#platform);
+  }
+
+  get #platform(): NodeJS.Platform {
+    return this.#o.platform ?? process.platform;
   }
 
   async #newest(): Promise<{ verified: VerifiedRelease; assets: Map<string, { url: string; size: number }> } | undefined> {

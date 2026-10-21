@@ -1,5 +1,6 @@
 {
   "version": "24.22.1",
+  "oldestShipped": "24.22.1",
   "sha256": {
     "node-v24.22.1-win-x64.zip": "d2046d28c2c3dcd211ac5145c0bf30e2047ef9dfb306693c8c6e2eccd8b95fa5",
     "node-v24.22.1-darwin-arm64.tar.gz": "89c682593d76cd44233fa53b1563264e7de9cbb189cad169135c5b4fadfbc0a7",

@@ -112,12 +112,26 @@ describe('the licence — EUPL-1.2 on every file of the package', () => {
 
   it('the Windows firewall rules name the program every version runs on — open on private networks, closed on public ones', () => {
     const iss = readFileSync(join(root, 'packaging', 'windows', 'karta.iss'), 'utf8');
-    const adds = iss.split('\n').filter((line) => line.includes('firewall add rule'));
-    expect(adds).toHaveLength(2);
-    expect(adds[0]).toContain('action=allow program=""{app}\\node.exe"" protocol=TCP localport=8880 profile=private remoteip=localsubnet');
-    expect(adds[1]).toContain('action=block program=""{app}\\node.exe"" profile=public');
-    // Rules Windows made by itself for older per-version copies go, at install and at uninstall.
-    expect(iss.match(/Karta Ergasias\\versions\\\*' \} \| Get-NetFirewallRule \| Remove-NetFirewallRule/g)).toHaveLength(2);
+    const lines = (needle: string) => iss.split('\n').filter((line) => line.includes(needle)).map((line) => line.trimEnd());
+    // Pinned whole: a reversed match or a wider filter in either line would delete other programs' rules.
+    expect(lines('firewall add rule')).toEqual([
+      String.raw`Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""Karta Ergasias 8880"" dir=in action=allow program=""{app}\node.exe"" protocol=TCP localport=8880 profile=private,domain remoteip=localsubnet"; Flags: runhidden`,
+      String.raw`Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""Karta Ergasias 8880"" dir=in action=block program=""{app}\node.exe"" profile=public"; Flags: runhidden`,
+    ]);
+    // Only the INBOUND rules Windows made by itself — for older per-version copies (exactly that path) and for exactly
+    // the installed node.exe — go, before ours are added and at uninstall; never another program's, never an outbound one.
+    const cleanup = String.raw`Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -NonInteractive -Command ""Get-NetFirewallApplicationFilter | Where-Object {{ $_.Program -match '\\AppData\\Local\\Karta Ergasias\\versions\\\d+\.\d+\.\d+\\node\.exe$' -or $_.Program -eq '{app}\node.exe' } | Get-NetFirewallRule | Where-Object {{ $_.Direction -eq 'Inbound' } | Remove-NetFirewallRule"""; Flags: runhidden`;
+    expect(lines('Remove-NetFirewallRule')).toEqual([cleanup, `${cleanup}; RunOnceId: "StaleRules"`]);
+    // The order at install: ours deleted by name, the ones Windows made removed, ours added.
+    const run = iss.slice(iss.indexOf('[Run]'), iss.indexOf('[UninstallRun]'));
+    expect(run.indexOf('delete rule name=')).toBeLessThan(run.indexOf('Remove-NetFirewallRule'));
+    expect(run.indexOf('Remove-NetFirewallRule')).toBeLessThan(run.indexOf('firewall add rule'));
+    // CI also runs on the oldest Node.js an installer shipped: on Windows every update of the line runs on it.
+    const oldest = (JSON.parse(readFileSync(join(root, 'packaging', 'node.json'), 'utf8')) as { oldestShipped: string }).oldestShipped;
+    expect(readFileSync(join(root, '.github', 'workflows', 'ci.yml'), 'utf8')).toContain(`node: ['24', '${oldest}']`);
+    // Always Program Files: only an administrator may change the runtime the rules trust.
+    expect(iss).toMatch(/^DisableDirPage=yes\r?$/m);
+    expect(iss).toMatch(/^UsePreviousAppDir=no\r?$/m);
   });
 
   it('every source, test, migration, build and install file carries the SPDX line', () => {

@@ -20,6 +20,7 @@ import {
   readPending,
   readRollback,
   restoreSnapshot,
+  runsOnInstalled,
   snapshotStores,
   versionDir,
   versionReady,
@@ -53,6 +54,8 @@ export interface LauncherOptions {
   startWindowMs?: number;
   /** How long to wait before trying again when the owner's port was taken (PORT_TAKEN). */
   portRetryMs?: number;
+  /** For the tests: another system's rule for the runtime (runsOnInstalled). */
+  platform?: NodeJS.Platform;
 }
 
 export const STOP_GRACE_MS = 90_000;
@@ -97,10 +100,14 @@ export async function runLauncher(o: LauncherOptions): Promise<number> {
     }
     const dir = versionDir(paths.versions, version);
     const onProbation = readPending(paths.versions)?.to === version;
+    // The installed runtime's Node.js as it is on disk now — not this launcher's own, which an app dragged over the
+    // running one (Mac) or a package upgrade (Linux) can leave older than the runtime file it starts.
+    const installedNode = bundledVersion(o).node;
     const startedMs = now();
     log(`starting ${version}${onProbation ? ' (on probation)' : ''}`);
-    child = spawn(runtimeFor(o, dir), [join(dir, 'app.mjs'), 'desktop', '--no-browser'], {
-      env: { ...o.env, KARTA_LAUNCHER: '1' },
+    child = spawn(runtimeFor(o, dir, installedNode, o.platform), [join(dir, 'app.mjs'), 'desktop', '--no-browser'], {
+      // The installed Node.js, for the updater's Windows check — the version may be running on its own copy.
+      env: { ...o.env, KARTA_LAUNCHER: '1', KARTA_INSTALLED_NODE: installedNode },
       stdio: ['ignore', 'ignore', 'pipe'],
       windowsHide: true,
     });
@@ -157,19 +164,24 @@ export async function runLauncher(o: LauncherOptions): Promise<number> {
 }
 
 /**
- * The runtime a version runs on: the INSTALLED one (the one running this launcher) when the version was made for the
- * same Node.js — always, short of a release that changed it — else the version's own copy. One program path, so the
+ * The runtime a version runs on: the INSTALLED one (Node.js `installedNode`) when the version was made for it — on
+ * Windows for any Node.js of its line (runsOnInstalled) — else the version's own copy. One program path, so the
  * system's firewall knows the program by the rule its installer made: Windows asks «allow this app?» for every new
  * program path that listens on the network, and blocks the staff page until someone with an administrator's password
  * answers — after every update, if each version ran its own copy (machine test, 22/10).
  */
-export function runtimeFor(o: Pick<LauncherOptions, 'runtime'>, dir: string, installedNode = process.versions.node): string {
+export function runtimeFor(o: Pick<LauncherOptions, 'runtime'>, dir: string, installedNode: string, platform: NodeJS.Platform = process.platform): string {
   try {
-    if (VersionFile.parse(JSON.parse(readFileSync(join(dir, 'version.json'), 'utf8'))).node === installedNode) return o.runtime;
+    if (runsOnInstalled(VersionFile.parse(JSON.parse(readFileSync(join(dir, 'version.json'), 'utf8'))).node, installedNode, platform)) return o.runtime;
   } catch {
     /* unreadable: its own copy, as before */
   }
   return join(dir, binaryName());
+}
+
+/** The version the installer carried (`<install>/app/version.json`): its number and the installed runtime's Node.js. */
+function bundledVersion(o: Pick<LauncherOptions, 'install'>): VersionFile {
+  return VersionFile.parse(JSON.parse(readFileSync(join(o.install, 'app', 'version.json'), 'utf8')));
 }
 
 /**
@@ -183,7 +195,7 @@ async function ensureCurrent(o: LauncherOptions, paths: DesktopPaths, now: () =>
   const pending = readPending(versions);
   if (pending !== undefined && pending.to !== current) rmSync(join(versions, 'pending.json'), { force: true });
 
-  const bundled = VersionFile.parse(JSON.parse(readFileSync(join(o.install, 'app', 'version.json'), 'utf8')));
+  const bundled = bundledVersion(o);
   const currentWhole = current !== undefined && versionReady(versions, current);
   const failedBefore = readRollback(versions)?.failed === bundled.version;
   if (!currentWhole || (newer(bundled.version, current!) && !failedBefore)) {

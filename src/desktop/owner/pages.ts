@@ -19,7 +19,7 @@ import { readDesktopState, writeDesktopState } from '../state.js';
 import type { Updater } from '../../update/updater.js';
 import { newer } from '../../update/release.js';
 import { readRollback } from '../../update/versions.js';
-import { VERSION } from '../../version.js';
+import { RELEASES_PAGE, VERSION } from '../../version.js';
 import { EASY_SERVER, namelessSender, newEasyTopic } from '../../stamp/notify.js';
 // `Html` is markup this program built itself — here, the QR code's SVG (qr.ts); everything else is escaped.
 import { Html, csrfField, html, note, page } from './html.js';
@@ -54,6 +54,21 @@ export interface PagesContext {
 
 const when = (iso: string) => new Date(iso).toLocaleString('el-GR', { timeZone: 'Europe/Athens' });
 
+/**
+ * What the «Ενημερώσεις» page says when a release comes as an installer here (Windows, update/updater.ts): a version on
+ * a new Node.js line — instead of the button, which cannot install it — or the Node.js fixes a newer installer brings.
+ */
+export function installerNote(u: Updater): Html | undefined {
+  const available = u.available();
+  const get = html`Κατεβάστε το από <a href="${RELEASES_PAGE}">τη σελίδα των εκδόσεων</a> και τρέξτε το (θέλει τον κωδικό διαχειριστή του υπολογιστή)· τα δεδομένα σας μένουν όπως είναι.`;
+  if (available !== undefined && u.needsInstaller()) {
+    return note('warn', html`Νέα έκδοση ${available}: φέρνει νέα σειρά Node.js, γι’ αυτό στα Windows εγκαθίσταται με το νέο πρόγραμμα εγκατάστασης, όχι από εδώ. ${get}`);
+  }
+  const node = u.nodeByInstaller();
+  if (node === undefined) return undefined;
+  return note('warn', html`Το πρόγραμμα τρέχει στο Node.js ${u.installedNode}. Το νεότερο πρόγραμμα εγκατάστασης φέρνει το Node.js ${node}, με τις διορθώσεις ασφαλείας του — στα Windows αυτό δεν έρχεται με τις ενημερώσεις. ${get}`);
+}
+
 export function ownerPages(c: PagesContext): ReadonlyMap<string, OwnerPage> {
   const ergani = loadEmployerConfig(c.env);
   const settings = loadStampSettings(c.env);
@@ -80,7 +95,8 @@ export function ownerPages(c: PagesContext): ReadonlyMap<string, OwnerPage> {
     const silent = c.erganiSilentSince(now);
     const pageProblem = c.staffPageProblem?.();
     const available = c.updater?.available();
-    const byItself = state?.nightUpdates === true && readRollback(c.paths.versions)?.failed !== available;
+    const needsInstaller = c.updater?.needsInstaller() === true;
+    const byItself = state?.nightUpdates === true && readRollback(c.paths.versions)?.failed !== available && !needsInstaller;
     return done('Αρχική', csrf, html`
 ${ergani.erganiRealm === 'production' ? html`` : note('warn', html`Ρυθμισμένο για το <strong>${ergani.erganiRealm === 'trial' ? 'δοκιμαστικό' : 'δοκιμαστικό (τοπικό)'}</strong> περιβάλλον: ό,τι δηλώνεται δεν είναι πραγματική δήλωση.`)}
 ${silent === undefined ? html`` : note('bad', `Ο υπολογιστής δεν φτάνει την ΕΡΓΑΝΗ από τις ${athensTime(silent).time.slice(0, 5)} (${athensTime(silent).date}). Οι κάρτες κρατιούνται και στέλνονται μόλις επανέλθει· αν μια κάρτα περάσει τα 15 λεπτά, ειδοποιήστε την Επιθεώρηση Εργασίας όταν αρχίζει και όταν τελειώνει το πρόβλημα.`)}
@@ -88,7 +104,7 @@ ${pageProblem === undefined ? html`` : note('bad', `Η σελίδα των ερ�
 ${waiting > 0 ? note('bad', html`${waiting} κάρτα/-ες χρειάζονται απόφαση: <a href="/queue">Εκκρεμότητες</a>.`) : note('ok', 'Καμία κάρτα δεν περιμένει απόφαση.')}
 ${backup === undefined ? note('warn', html`Δεν έχει γίνει ακόμη αντίγραφο ασφαλείας: <a href="/backup">Αντίγραφα</a>.`) : backup.ok ? note('ok', `Τελευταίο αντίγραφο: ${when(backup.atIso)}.`) : note('bad', `Το τελευταίο αντίγραφο απέτυχε: ${backup.problem ?? ''}`)}
 ${rolledBack()}
-${available === undefined ? html`` : note('warn', html`Νέα έκδοση ${available}: ${byItself ? 'εγκαθίσταται μόνη της τη νύχτα, ή ' : ''}<a href="/updates">Ενημερώσεις</a>.`)}
+${available === undefined ? html`` : note('warn', html`Νέα έκδοση ${available}: ${needsInstaller ? 'θέλει το νέο πρόγραμμα εγκατάστασης — ' : byItself ? 'εγκαθίσταται μόνη της τη νύχτα, ή ' : ''}<a href="/updates">Ενημερώσεις</a>.`)}
 <p>Η σελίδα των εργαζομένων: <strong>${pageAddress}</strong>${settings.listenHost === '127.0.0.1' ? ' (μόνο σε αυτόν τον υπολογιστή)' : ''}.</p>
 <p><a href="/check">Έλεγχος σύνδεσης με την ΕΡΓΑΝΗ</a> — μόνο ανάγνωση: για κάθε παράρτημα, αν ο χρήστης του συνδέεται και αν του επιτρέπεται η δήλωση κάρτας.</p>`);
   };
@@ -353,7 +369,8 @@ ${chosen === undefined ? html`` : html`<form method="post" action="/backup">${cs
 ${rolledBack()}
 ${record === undefined ? html`<p>Δεν έχει γίνει ακόμη έλεγχος για νέα έκδοση (γίνεται μία φορά την ημέρα).</p>` : record.ok ? html`<p>Τελευταίος έλεγχος: ${when(record.checkedIso)}.</p>` : note('warn', `Ο τελευταίος έλεγχος (${when(record.checkedIso)}) απέτυχε: ${record.problem ?? ''}`)}
 ${record?.installProblem === undefined || available === undefined ? html`` : note('warn', `Η τελευταία προσπάθεια ενημέρωσης (${when(record.installProblem.atIso)}) δεν έγινε: ${record.installProblem.problem}`)}
-${available === undefined ? html`` : html`<form method="post" action="/updates"><fieldset><legend>Νέα έκδοση ${available}</legend>${csrfField(csrf)}<input type="hidden" name="do" value="install">
+${installerNote(u) ?? html``}
+${available === undefined || u.needsInstaller() ? html`` : html`<form method="post" action="/updates"><fieldset><legend>Νέα έκδοση ${available}</legend>${csrfField(csrf)}<input type="hidden" name="do" value="install">
 <p>Η σελίδα των εργαζομένων σταματά για ένα-δύο λεπτά. Αν η νέα έκδοση δεν ξεκινήσει σωστά, το πρόγραμμα γυρίζει μόνο του στην τωρινή.</p>
 <p><button>Ενημέρωση τώρα</button></p></fieldset></form>`}
 <form method="post" action="/updates">${csrfField(csrf)}<input type="hidden" name="do" value="check"><p><button class="secondary">Έλεγχος τώρα</button></p></form>

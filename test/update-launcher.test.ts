@@ -49,13 +49,13 @@ function world(bundled: string, bundledNode = '24.0.0'): World {
 }
 
 /** A version already in `versions/`, as an update leaves it. */
-function placed(w: World, version: string): void {
+function placed(w: World, version: string, node = '22.0.0'): void {
   const dir = join(w.versions, version);
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'node'), `#!/bin/sh\nKARTA_TEST_RUNTIME="$0" exec "${process.execPath}" "$@"\n`);
   chmodSync(join(dir, 'node'), 0o700);
   copyFileSync(FAKE, join(dir, 'app.mjs'));
-  writeFileSync(join(dir, 'version.json'), JSON.stringify({ version, node: '24.0.0' }));
+  writeFileSync(join(dir, 'version.json'), JSON.stringify({ version, node }));
 }
 
 const behave = (w: World, version: string, what: object) => writeFileSync(join(w.data, `behave-${version}.json`), JSON.stringify(what));
@@ -78,8 +78,8 @@ const rows = (w: World) => {
   }
 };
 
-function launch(w: World, options: { probationMs?: number; portRetryMs?: number } = {}): { child: ChildProcess; exited: Promise<number | null>; said: () => string } {
-  const code = `import(${JSON.stringify(LAUNCHER)}).then((m) => m.runLauncher({ install: ${JSON.stringify(w.install)}, runtime: ${JSON.stringify(w.runtime)}, env: process.env, probationMs: ${options.probationMs ?? 60_000}, portRetryMs: ${options.portRetryMs ?? 60_000} })).then((c) => process.exit(c))`;
+function launch(w: World, options: { probationMs?: number; portRetryMs?: number; platform?: NodeJS.Platform } = {}): { child: ChildProcess; exited: Promise<number | null>; said: () => string } {
+  const code = `import(${JSON.stringify(LAUNCHER)}).then((m) => m.runLauncher({ install: ${JSON.stringify(w.install)}, runtime: ${JSON.stringify(w.runtime)}, env: process.env, probationMs: ${options.probationMs ?? 60_000}, portRetryMs: ${options.portRetryMs ?? 60_000}, platform: ${JSON.stringify(options.platform ?? process.platform)} })).then((c) => process.exit(c))`;
   const child = spawn(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', code], {
     env: { PATH: process.env['PATH'], KARTA_DATA_DIR: w.data },
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -218,7 +218,7 @@ describe.skipIf(process.platform === 'win32')('the launcher', () => {
 
   it('a version made for the installed Node.js runs on the installed runtime (one path for the firewall); another on its own copy', async () => {
     const w = world('0.1.0', process.versions.node);
-    placed(w, '0.2.0'); // made for another Node.js (24.0.0)
+    placed(w, '0.2.0'); // made for another Node.js (22.0.0)
     behave(w, '0.1.0', { switchTo: '0.2.0' });
     behave(w, '0.2.0', { commit: true, hang: true });
     launch(w);
@@ -227,18 +227,44 @@ describe.skipIf(process.platform === 'win32')('the launcher', () => {
     // The path each ran from: the installed runtime, not 0.1.0's own copy of it; 0.2.0's own copy.
     expect(ran.find((l) => l.startsWith('0.1.0 launcher=1'))?.endsWith(`runtime=${w.runtime}`)).toBe(true);
     expect(ran.find((l) => l.startsWith('0.2.0 launcher=1'))?.endsWith(`runtime=${join(w.versions, '0.2.0', 'node')}`)).toBe(true);
+    // …and each is told the INSTALLED Node.js, whatever runs it (the updater's Windows check compares with that).
+    expect(ran.find((l) => l.startsWith('0.2.0 launcher=1'))).toContain(`installed=${process.versions.node} `);
   }, 20_000);
 
-  it('runtimeFor: the installed runtime for the same Node.js; the version\'s own copy for another, or an unreadable version.json', () => {
+  it('runtimeFor: the installed runtime for the same Node.js — on Windows for any of its line; else the version\'s own copy, as for an unreadable version.json', () => {
     const dir = mkdtempSync(join(tmpdir(), 'karta-runtime-'));
     cleanup.push(() => rmSync(dir, { recursive: true, force: true }));
     const o = { runtime: '/installed/node' };
+    const own = join(dir, process.platform === 'win32' ? 'node.exe' : 'node');
     writeFileSync(join(dir, 'version.json'), JSON.stringify({ version: '0.3.0', node: '24.22.1' }));
-    expect(runtimeFor(o, dir, '24.22.1')).toBe('/installed/node');
-    expect(runtimeFor(o, dir, '24.23.0')).toBe(join(dir, process.platform === 'win32' ? 'node.exe' : 'node'));
+    expect(runtimeFor(o, dir, '24.22.1', 'linux')).toBe('/installed/node');
+    expect(runtimeFor(o, dir, '24.23.0', 'linux')).toBe(own);
+    expect(runtimeFor(o, dir, '24.23.0', 'darwin')).toBe(own);
+    expect(runtimeFor(o, dir, '24.23.0', 'win32')).toBe('/installed/node');
+    expect(runtimeFor(o, dir, '26.0.0', 'win32')).toBe(own);
     writeFileSync(join(dir, 'version.json'), '{');
-    expect(runtimeFor(o, dir, '24.22.1')).toBe(join(dir, process.platform === 'win32' ? 'node.exe' : 'node'));
+    expect(runtimeFor(o, dir, '24.22.1', 'win32')).toBe(own);
   });
+
+  it('on Windows, going back after an installer that brought a newer Node.js of the line still runs on the installed runtime', async () => {
+    // Node.js numbers no computer runs, so the test cannot pass by the launcher's own Node.js happening to match.
+    const w = world('0.2.0', '7.1.0'); // the new installer: 0.2.0, and Node.js 7.1.0 in the installed place
+    store(w).close();
+    placed(w, '0.1.0', '7.0.3'); // what ran before it, made for the Node.js the older installer carried
+    writeFileSync(join(w.versions, 'current'), '0.1.0\n');
+    behave(w, '0.2.0', { exit: 1 }); // fails its probation
+    behave(w, '0.1.0', { hang: true });
+    launch(w, { platform: 'win32' });
+    await until('0.1.0 again', () => started(w, '0.1.0') === 1);
+    expect(mark(w, 'current')).toBe('0.1.0');
+    expect(JSON.parse(readFileSync(join(w.versions, 'rollback.json'), 'utf8'))).toMatchObject({ failed: '0.2.0', back: '0.1.0' });
+    // Both from the one path the firewall rules name — never 0.1.0's own copy of its older Node.js.
+    for (const version of ['0.2.0', '0.1.0']) {
+      const ran = runs(w).split('\n').find((l) => l.startsWith(`${version} launcher=1`));
+      expect(ran?.endsWith(`runtime=${w.runtime}`)).toBe(true);
+      expect(ran).toContain('installed=7.1.0 '); // …and told the installed Node.js as it is on disk
+    }
+  }, 20_000);
 
   it('one launcher per data folder: a second one (the icon clicked again, no system service) leaves at once and starts nothing', async () => {
     const w = world('0.1.0');

@@ -35,6 +35,7 @@ const Version = z.string().regex(/^\d{1,4}\.\d{1,4}\.\d{1,4}$/);
 // `version.json` and `pending.json` are read by the launcher, which never updates: a field a later version adds is
 // ignored (not refused), so a newer program can never make an older launcher fail. Their fields here stay as they are.
 export const VersionFile = z.object({ version: Version, node: Version });
+export type VersionFile = z.infer<typeof VersionFile>;
 export const Pending = z.object({ from: Version, to: Version, snapshot: z.string().optional(), atIso: z.string() });
 export type Pending = z.infer<typeof Pending>;
 export const Rollback = z.object({ failed: Version, back: Version, atIso: z.string(), why: z.string() }).strict();
@@ -42,6 +43,17 @@ export type Rollback = z.infer<typeof Rollback>;
 
 export const versionDir = (versions: string, version: string) => join(versions, version);
 export const binaryName = (platform: NodeJS.Platform = process.platform) => (platform === 'win32' ? 'node.exe' : 'node');
+
+/**
+ * Whether a version made for Node.js `made` runs on the INSTALLED runtime (Node.js `installed`) rather than on its own
+ * copy. Windows: whenever both are of one Node.js line (the same major — compatible by Node.js's own promise), so the
+ * program always runs from the one path the installer's firewall rules name — going back to the version before an
+ * installer that brought a newer Node.js of the line included. Elsewhere: only the very same Node.js, so an update
+ * brings its Node.js fixes with it.
+ */
+export function runsOnInstalled(made: string, installed: string, platform: NodeJS.Platform = process.platform): boolean {
+  return platform === 'win32' ? made.split('.')[0] === installed.split('.')[0] : made === installed;
+}
 
 function writeWhole(path: string, text: string): void {
   writeFileSync(`${path}.new`, text, { mode: 0o600 });

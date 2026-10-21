@@ -14,6 +14,8 @@ export const UpdateRecord = z.object({
   /** A newer release whose signature and signed list verified. */
   available: z.string().optional(),
   problem: z.string().optional(),
+  /** The Node.js the newest release was made for (its signed manifest) — what Windows needs an installer for (updater.ts). */
+  releaseNode: z.string().optional(),
   installProblem: z.object({ atIso: z.string(), problem: z.string() }).optional(),
 });
 export type UpdateRecord = z.infer<typeof UpdateRecord>;

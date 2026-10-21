@@ -1,0 +1,19 @@
+<!-- SPDX-License-Identifier: EUPL-1.2 -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 380" width="340" height="380" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="13" role="img" aria-label="Σχέδιο του παραθύρου του Mac «Δεν ανοίχτηκε η Κάρτα Εργασίας», με τα κουμπιά Τέλος και Μετακίνηση στον Κάδο">
+  <rect x="1" y="1" width="338" height="378" rx="14" fill="#f6f6f6" stroke="#c9d3d6"/>
+  <text x="326" y="20" text-anchor="end" fill="#9a5b00" font-size="11">ΣΧΕΔΙΟ — όχι η πραγματική οθόνη</text>
+  <rect x="140" y="34" width="60" height="60" rx="13" fill="#0e5563"/>
+  <text x="170" y="72" text-anchor="middle" fill="#fff" font-size="22" font-weight="700">ΚΕ</text>
+  <text x="170" y="122" text-anchor="middle" font-weight="700" font-size="14" fill="#1d2327">Δεν ανοίχτηκε η «Κάρτα Εργασίας»</text>
+  <g fill="#3c4448" text-anchor="middle">
+    <text x="170" y="150">Η Apple δεν μπόρεσε να επαληθεύσει ότι</text>
+    <text x="170" y="168">η «Κάρτα Εργασίας» δεν περιέχει κακόβουλο</text>
+    <text x="170" y="186">λογισμικό που θα μπορούσε να βλάψει το Mac</text>
+    <text x="170" y="204">ή να θέσει σε κίνδυνο το απόρρητό σας.</text>
+  </g>
+  <rect x="24" y="234" width="292" height="36" rx="8" fill="#0a84ff" stroke="#d13b00" stroke-width="3"/>
+  <text x="170" y="257" text-anchor="middle" fill="#fff" font-weight="600">Τέλος</text>
+  <rect x="24" y="280" width="292" height="36" rx="8" fill="#e4e4e6"/>
+  <text x="170" y="303" text-anchor="middle" fill="#1d2327">Μετακίνηση στον Κάδο</text>
+  <text x="170" y="352" text-anchor="middle" fill="#d13b00" font-weight="600">① «Τέλος» — όχι «Μετακίνηση στον Κάδο»</text>
+</svg>

@@ -11,7 +11,8 @@ import { readDesktopState, writeDesktopState } from '../src/desktop/state.js';
 import { SYSTEMS, UPDATE_KEYS, newer, parseSums, sha256, signedByUs, thisSystem, verifiedRelease } from '../src/update/release.js';
 import { Updater, nightWindow } from '../src/update/updater.js';
 import { RESTART, binaryName, writeRollback } from '../src/update/versions.js';
-import { REPOSITORY, VERSION } from '../src/version.js';
+import { RELEASES_PAGE, REPOSITORY, VERSION } from '../src/version.js';
+import { installerNote } from '../src/desktop/owner/pages.js';
 
 /**
  * THE UPDATER — against a stand-in for GitHub's releases API on 127.0.0.1, with releases signed by a key made for the
@@ -253,17 +254,67 @@ describe('installing', () => {
     expect(u.record()?.installProblem).toBeUndefined();
   });
 
-  it('on Windows, a release on another Node.js is not installed by an update — it comes as a new installer; the same Node.js installs', async () => {
+  it('on Windows, a release on a new Node.js line comes as a new installer — noted at the check, never tried at night, refused by the button with the page to get it; one of the same line installs', async () => {
     const fake = await fakeGithub();
     fake.serve(release('0.2.0')); // made for Node.js 99.0.0
     const other = setUp();
-    const { u, happened } = updater(other, fake, { platform: 'win32', installedNode: '24.22.1' });
-    expect((await u.install())?.problem).toMatch(/νέο Node\.js.*πρόγραμμα εγκατάστασης/);
+    const night = Date.parse('2026-12-01T01:00:00Z'); // 03:00 Athens
+    // The installed Node.js as the launcher tells the program (its environment).
+    const { u, happened } = updater(other, fake, { platform: 'win32', env: { KARTA_INSTALLED_NODE: '24.22.1' }, now: () => night });
+    expect(await u.check()).toMatchObject({ ok: true, available: '0.2.0', releaseNode: '99.0.0' });
+    expect(u.needsInstaller()).toBe(true);
+    expect(installerNote(u)?.text).toMatch(new RegExp(`Νέα έκδοση 0\\.2\\.0: φέρνει νέα σειρά Node\\.js.*<a href="${RELEASES_PAGE}">`));
+    await u.tick();
+    expect(u.record()?.installProblem).toBeUndefined(); // the night did not try
+    const refused = await u.install();
+    expect(refused?.problem).toMatch(/νέα σειρά Node\.js.*πρόγραμμα εγκατάστασης/);
+    expect(refused?.problem).toContain(RELEASES_PAGE);
     expect(happened).toEqual([]);
     expect(existsSync(join(other.versions, '0.2.0'))).toBe(false);
-    const same = setUp();
-    expect(await updater(same, fake, { platform: 'win32', installedNode: '99.0.0' }).u.install()).toBeUndefined();
-    expect(readFileSync(join(same.versions, 'current'), 'utf8').trim()).toBe('0.2.0');
+    // Elsewhere the same release is an update like any other: it brings its own Node.js.
+    const linux = updater(setUp(), fake, { platform: 'linux', installedNode: '24.22.1' }).u;
+    await linux.check();
+    expect([linux.needsInstaller(), linux.nodeByInstaller(), installerNote(linux)]).toEqual([false, undefined, undefined]);
+    // On Windows one of the same line installs — it runs on the installed runtime (launcher.ts runtimeFor).
+    for (const installedNode of ['99.0.0', '99.3.1']) {
+      const same = setUp();
+      expect(await updater(same, fake, { platform: 'win32', env: { KARTA_INSTALLED_NODE: installedNode } }).u.install()).toBeUndefined();
+      expect(readFileSync(join(same.versions, 'current'), 'utf8').trim()).toBe('0.2.0');
+    }
+  });
+
+  it('on Windows, an installer run since the check that brought the new line: the release is an update again at once — the button, the night', async () => {
+    const fake = await fakeGithub();
+    fake.serve(release('0.2.0')); // made for Node.js 99.0.0
+    const paths = setUp();
+    const night = Date.parse('2026-12-01T01:00:00Z'); // 03:00 Athens
+    await updater(paths, fake, { platform: 'win32', installedNode: '24.22.1', now: () => night - 3_600_000 }).u.check();
+    // The program starts again after that installer, on Node.js 99.1.0 — no new check yet (the last one is an hour old).
+    const { u, happened } = updater(paths, fake, { platform: 'win32', installedNode: '99.1.0', now: () => night });
+    expect(u.available()).toBe('0.2.0');
+    expect(u.needsInstaller()).toBe(false);
+    await u.tick();
+    expect(happened).toContain(`exit ${RESTART}`);
+  });
+
+  it('on Windows, a release made for a newer Node.js of the line: it installs as an update, and the page says the newer installer brings that Node.js', async () => {
+    const fake = await fakeGithub();
+    fake.serve(release('0.2.0', { node: '24.23.0' }));
+    const { u } = updater(setUp(), fake, { platform: 'win32', installedNode: '24.22.1' });
+    await u.check();
+    expect([u.needsInstaller(), u.nodeByInstaller()]).toEqual([false, '24.23.0']);
+    expect(installerNote(u)?.text).toMatch(new RegExp(`Node\\.js 24\\.22\\.1\\. Το νεότερο πρόγραμμα εγκατάστασης φέρνει το Node\\.js 24\\.23\\.0.*<a href="${RELEASES_PAGE}">`));
+    // …also once that version runs (nothing newer «available»): the Node.js still comes only with the installer.
+    const running = updater(setUp(), fake, { platform: 'win32', installedNode: '24.22.1', version: '0.2.0' }).u;
+    await running.check();
+    expect([running.available(), running.nodeByInstaller()]).toEqual([undefined, '24.23.0']);
+    // Not once the installer brought it; not elsewhere (the update brings its own Node.js there).
+    const brought = updater(setUp(), fake, { platform: 'win32', installedNode: '24.23.0' }).u;
+    await brought.check();
+    expect(installerNote(brought)).toBeUndefined();
+    const mac = updater(setUp(), fake, { platform: 'darwin', installedNode: '24.22.1' }).u;
+    await mac.check();
+    expect(mac.nodeByInstaller()).toBeUndefined();
   });
 
   it('the same Node.js is copied, not downloaded', async () => {
