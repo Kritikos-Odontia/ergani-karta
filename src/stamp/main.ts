@@ -3,7 +3,7 @@ import { heartbeatSender } from '../heartbeat.js';
 import { Alarms } from './alarms.js';
 import { branchHeading, loadEverything } from './config.js';
 import { filingClient } from './deadline.js';
-import { ntfySender } from './notify.js';
+import { namelessSender, ntfySender, type PushSender } from './notify.js';
 import { Outbox } from './outbox.js';
 import { ReachWatch } from './reach.js';
 import { HEALTHY_PASS_MS, createStampServer } from './server.js';
@@ -23,8 +23,8 @@ import { openStampStore, type Instance } from './store.js';
  */
 export async function runStampService(
   env: NodeJS.ProcessEnv = process.env,
-  options: { onSignals?: boolean; beforeStart?: () => void } = {},
-): Promise<{ stop: () => Promise<void>; silentSinceMs: (nowMs: number) => number | undefined }> {
+  options: { onSignals?: boolean; beforeStart?: () => void; pushes?: PushSender; listenRetryMs?: number; log?: (line: string) => void } = {},
+): Promise<{ stop: () => Promise<void>; silentSinceMs: (nowMs: number) => number | undefined; pageProblem: () => string | undefined }> {
   const { ergani, stamp } = loadEverything(env);
   const instance: Instance = { name: stamp.instance, realm: ergani.erganiRealm, employerAfm: ergani.employerAfm };
   const codes = ergani.branches.map((b) => b.branchCode);
@@ -38,7 +38,8 @@ export async function runStampService(
   }
   const db = openStampStore(stamp.dbPath, instance, codes);
   const now = Date.now;
-  const log = (line: string) => console.log(`[${stamp.instance}] ${line}`);
+  // The console (`ergani stamp`, Docker's log), or the program's own log (the desktop program, whose console nobody sees).
+  const log = options.log ?? ((line: string) => console.log(`[${stamp.instance}] ${line}`));
 
   const clients = new Map(ergani.branches.map((config) => [config.branchCode, filingClient(config, now)] as const));
   const outbox = new Outbox({ db, clients, employerAfm: ergani.employerAfm, now, log });
@@ -47,7 +48,14 @@ export async function runStampService(
     db,
     branches: stamp.branches.map((b) => ({ code: b.code, label: b.label, fromSchedule: b.scheduleFromErgani })),
     readers: new Map([...clients].filter(([code]) => readsSchedule(code))),
-    send: stamp.ntfy === undefined ? undefined : ntfySender(stamp.ntfy.url, stamp.ntfy.token),
+    // The employer's own server (pushes with names), or the easy mode (nameless, ntfy.sh), or the desktop program's
+    // own choice (`pushes`, its «Ειδοποιήσεις» page) — in that order.
+    send:
+      stamp.ntfy !== undefined
+        ? ntfySender(stamp.ntfy.url, stamp.ntfy.token)
+        : stamp.easyTopic !== undefined
+          ? namelessSender(stamp.easyTopic)
+          : options.pushes,
     now,
     title: `ΕΡΓΑΝΗ — ${stamp.label}`,
     log,
@@ -80,7 +88,26 @@ export async function runStampService(
   outbox.start();
   alarms.start();
   reach.start();
-  server.listen(stamp.port, stamp.listenHost, () => log(`page on ${stamp.listenHost}:${stamp.port}`));
+  // The page's address may be missing at the start — the Wi-Fi not up yet at sign-in, a new address from the router —
+  // or its port held by another program. That never ends the service (the outbox and the alarms go on): it is said
+  // (`pageProblem`, the error's code) and tried again every half minute until the page opens.
+  let pageProblem: string | undefined;
+  let relisten: NodeJS.Timeout | undefined;
+  let stopped = false;
+  const retryMs = options.listenRetryMs ?? 30_000;
+  const listen = () => server.listen(stamp.port, stamp.listenHost);
+  server.on('listening', () => {
+    pageProblem = undefined;
+    log(`page on ${stamp.listenHost}:${stamp.port}`);
+  });
+  server.on('error', (error: NodeJS.ErrnoException) => {
+    const code = error.code ?? error.message;
+    if (server.listening || stopped) return void log(`page: ${code}`);
+    if (pageProblem !== code) log(`page: not on ${stamp.listenHost}:${stamp.port} (${code}) — trying again every ${Math.round(retryMs / 1000)} s`);
+    pageProblem = code;
+    relisten = setTimeout(listen, retryMs);
+  });
+  listen();
 
   // The monitor hears «up» each minute only while the outbox is passing; a stuck or dead service goes silent.
   const beat = stamp.heartbeatUrl === undefined ? undefined : heartbeatSender(stamp.heartbeatUrl);
@@ -97,6 +124,8 @@ export async function runStampService(
   const stop = () =>
     (stopping ??= (async () => {
       log('stopping');
+      stopped = true;
+      if (relisten !== undefined) clearTimeout(relisten);
       if (beating !== undefined) clearInterval(beating);
       reach.stop();
       server.close();
@@ -113,5 +142,5 @@ export async function runStampService(
     process.once('SIGTERM', () => void stop());
     process.once('SIGINT', () => void stop());
   }
-  return { stop, silentSinceMs: (t) => reach.silentSinceMs(t) };
+  return { stop, silentSinceMs: (t) => reach.silentSinceMs(t), pageProblem: () => pageProblem };
 }

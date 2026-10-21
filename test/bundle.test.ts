@@ -70,7 +70,7 @@ describe('the desktop build', () => {
 
     const data = join(root, 'data-alone');
     const [ownerPort, staffPort] = [await freePort(), await freePort()];
-    run(process.execPath, [join(alone, 'app.mjs'), 'desktop', '--no-browser'], { KARTA_DATA_DIR: data, KARTA_OWNER_PORT: String(ownerPort), ERGANI_BASE_URL: fake.baseUrl }, alone);
+    run(process.execPath, [join(alone, 'app.mjs'), 'desktop', '--no-browser', '--no-open'], { KARTA_DATA_DIR: data, KARTA_OWNER_PORT: String(ownerPort), ERGANI_BASE_URL: fake.baseUrl }, alone);
     const owner = `http://127.0.0.1:${ownerPort}`;
     await until('the setup page', async () => (await fetch(`${owner}/setup`)).ok);
     const saved = await fetch(`${owner}/setup`, {

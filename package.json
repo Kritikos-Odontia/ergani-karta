@@ -7,7 +7,7 @@
   "license": "EUPL-1.2",
   "repository": {
     "type": "git",
-    "url": "https://github.com/odontia/ergani-karta"
+    "url": "https://github.com/Kritikos-Odontia/ergani-karta"
   },
   "engines": {
     "node": ">=24"

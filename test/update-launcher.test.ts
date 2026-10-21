@@ -12,7 +12,8 @@ import { afterEach, describe, expect, it } from 'vitest';
  * small wrapper around the Node.js running the tests. What is held: the installer's version placed on first start;
  * a switch that passes; a switch that fails, and one that hangs, undone with the store as it was; a version that keeps
  * stopping at start falls back once; a newer installer over an older program is a switch on probation, and an
- * installer whose version once failed is not tried again by itself; stopping the launcher stops the program.
+ * installer whose version once failed is not tried again by itself; stopping the launcher stops the program; one
+ * launcher per data folder; a version that finds the owner's port taken is blamed for nothing.
  */
 const LAUNCHER = new URL('../src/update/launcher.ts', import.meta.url).pathname;
 const FAKE = new URL('./fixtures/fake-version.mjs', import.meta.url).pathname;
@@ -58,6 +59,7 @@ function placed(w: World, version: string): void {
 
 const behave = (w: World, version: string, what: object) => writeFileSync(join(w.data, `behave-${version}.json`), JSON.stringify(what));
 const runs = (w: World) => (existsSync(join(w.data, 'runs.log')) ? readFileSync(join(w.data, 'runs.log'), 'utf8') : '');
+const started = (w: World, version: string) => runs(w).split('\n').filter((l) => l.startsWith(`${version} launcher=1`)).length;
 const mark = (w: World, name: string) => (existsSync(join(w.versions, name)) ? readFileSync(join(w.versions, name), 'utf8').trim() : undefined);
 
 function store(w: World): DatabaseSync {
@@ -75,8 +77,8 @@ const rows = (w: World) => {
   }
 };
 
-function launch(w: World, options: { probationMs?: number } = {}): { child: ChildProcess; exited: Promise<number | null> } {
-  const code = `import(${JSON.stringify(LAUNCHER)}).then((m) => m.runLauncher({ install: ${JSON.stringify(w.install)}, runtime: ${JSON.stringify(w.runtime)}, env: process.env, probationMs: ${options.probationMs ?? 60_000} })).then((c) => process.exit(c))`;
+function launch(w: World, options: { probationMs?: number; portRetryMs?: number } = {}): { child: ChildProcess; exited: Promise<number | null>; said: () => string } {
+  const code = `import(${JSON.stringify(LAUNCHER)}).then((m) => m.runLauncher({ install: ${JSON.stringify(w.install)}, runtime: ${JSON.stringify(w.runtime)}, env: process.env, probationMs: ${options.probationMs ?? 60_000}, portRetryMs: ${options.portRetryMs ?? 60_000} })).then((c) => process.exit(c))`;
   const child = spawn(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', code], {
     env: { PATH: process.env['PATH'], KARTA_DATA_DIR: w.data },
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -91,8 +93,7 @@ function launch(w: World, options: { probationMs?: number } = {}): { child: Chil
       await exited;
     }
   });
-  (child as ChildProcess & { said: () => string }).said = () => said;
-  return { child, exited };
+  return { child, exited, said: () => said };
 }
 
 async function until(what: string, test: () => boolean, ms = 15_000): Promise<void> {
@@ -199,5 +200,62 @@ describe.skipIf(process.platform === 'win32')('the launcher', () => {
     await until('0.1.0 running', () => runs(w).includes('0.1.0 launcher=1'));
     expect(mark(w, 'current')).toBe('0.1.0');
     expect(existsSync(join(w.versions, '0.2.0'))).toBe(false);
+  }, 20_000);
+
+  it('a switch noted by a later version with a field this launcher does not know is still read (the launcher never updates)', async () => {
+    const w = world('0.1.0');
+    store(w).close();
+    placed(w, '0.2.0');
+    writeFileSync(join(w.versions, '0.2.0', 'version.json'), JSON.stringify({ version: '0.2.0', node: '24.0.0', later: 'a field' }));
+    behave(w, '0.1.0', { switchTo: '0.2.0', pendingExtra: { later: 'a field' }, then: { hang: true } });
+    behave(w, '0.2.0', { exit: 1 });
+    launch(w);
+    await until('0.1.0 again', () => started(w, '0.1.0') === 2);
+    expect(started(w, '0.2.0')).toBe(1); // ran (its version.json whole), failed, undone
+    expect(mark(w, 'current')).toBe('0.1.0');
+  }, 20_000);
+
+  it('one launcher per data folder: a second one (the icon clicked again, no system service) leaves at once and starts nothing', async () => {
+    const w = world('0.1.0');
+    behave(w, '0.1.0', { hang: true });
+    const first = launch(w);
+    await until('the first run', () => started(w, '0.1.0') === 1);
+    const second = launch(w);
+    expect(await second.exited).toBe(0);
+    expect(second.said()).toContain('another launcher already runs the program');
+    expect(started(w, '0.1.0')).toBe(1);
+    first.child.kill('SIGTERM');
+    expect(await first.exited).toBe(0);
+    launch(w); // the first one gone, the next one runs it
+    await until('a run by the next launcher', () => started(w, '0.1.0') === 2);
+  }, 20_000);
+
+  it('a version that finds the owner’s port taken is no failed start: no going back to «previous», however often', async () => {
+    const w = world('0.1.0');
+    placed(w, '0.1.0');
+    placed(w, '0.2.0');
+    writeFileSync(join(w.versions, 'current'), '0.2.0\n');
+    writeFileSync(join(w.versions, 'previous'), '0.1.0\n');
+    behave(w, '0.2.0', { exit: 76 });
+    behave(w, '0.1.0', { hang: true });
+    launch(w, { portRetryMs: 100 });
+    await until('a fourth start of 0.2.0', () => started(w, '0.2.0') >= 4);
+    expect(started(w, '0.1.0')).toBe(0);
+    expect(mark(w, 'current')).toBe('0.2.0');
+    expect(mark(w, 'previous')).toBe('0.1.0');
+    expect(existsSync(join(w.versions, 'rollback.json'))).toBe(false);
+  }, 20_000);
+
+  it('…and no switch is undone for it: the new version, still on probation, is simply tried again', async () => {
+    const w = world('0.1.0');
+    store(w).close();
+    placed(w, '0.2.0');
+    behave(w, '0.1.0', { switchTo: '0.2.0' });
+    behave(w, '0.2.0', { exit: 76, then: { commit: true, hang: true } });
+    launch(w, { portRetryMs: 100 });
+    await until('the probation passed', () => mark(w, 'previous') === '0.1.0' && !existsSync(join(w.versions, 'pending.json')));
+    expect(started(w, '0.2.0')).toBe(2);
+    expect(started(w, '0.1.0')).toBe(1);
+    expect(existsSync(join(w.versions, 'rollback.json'))).toBe(false);
   }, 20_000);
 });

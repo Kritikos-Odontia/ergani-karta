@@ -4,8 +4,9 @@
 
 Every release carries `SHA256SUMS` (the sha256 of every file of the release) and `SHA256SUMS.sig`, an **Ed25519**
 signature over it made by the release workflow (`.github/workflows/release.yml`, `packaging/release-files.mjs`) with
-the project's update-signing key. The key's private half is a repository secret, given to that one step only; its
-public half is in the program (`src/update/release.ts`, `UPDATE_KEYS`). An installed copy installs an update only when:
+the project's update-signing key. The key's private half is a secret of the repository's **`release` environment**,
+given to that one step only, and only for a published release; its public half is in the program
+(`src/update/release.ts`, `UPDATE_KEYS`). An installed copy installs an update only when:
 
 1. the signature verifies against a key in `UPDATE_KEYS`;
 2. `manifest.json` and every downloaded file match their line in the signed list;
@@ -14,6 +15,16 @@ public half is in the program (`src/update/release.ts`, `UPDATE_KEYS`). An insta
 Anything else is refused and the reason is shown on the owner's «Ενημερώσεις» page. The workflow refuses to sign with a
 key the program does not hold. To change keys: add the new public key to `UPDATE_KEYS` in a release signed with the old
 one; sign with the new one from the next release on.
+
+**The `release` environment** (Settings → Environments, kept by the maintainers): deployments only from tags `v*`, a
+maintainer as required reviewer, and `UPDATE_SIGNING_KEY` as its secret — not as a repository secret. A run of the
+workflow by hand builds the installers and keeps them with the run, **unsigned**: it never reaches the key, and no
+installed copy would take its files as an update.
+
+**Testing updates from a private copy of the repository.** GitHub answers a private repository's releases only with a
+login: the program then reads a read-only token from `KARTA_UPDATE_TOKEN` in its environment and sends it to
+`api.github.com` only (never to the file host a download is redirected to; never logged). The public repository needs
+none, and an installed copy has none.
 
 ## The installers: not signed with a paid certificate
 

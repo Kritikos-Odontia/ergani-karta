@@ -34,6 +34,8 @@ export const API = 'https://api.github.com';
 const DAY_MS = 86_400_000;
 const HOUR_MS = 3_600_000;
 const MAX_ASSET_BYTES = 300 * 1024 * 1024;
+/** The release list, the signed list, its signature, the manifest: small, or not ours. */
+const SMALL_BYTES = 1024 * 1024;
 /** A runtime, unpacked: Node.js is about 120 MB; anything far larger is not one. */
 const MAX_UNPACKED_BYTES = 400 * 1024 * 1024;
 
@@ -86,6 +88,15 @@ export class Updater {
     return readDesktopState(this.#o.paths.desktop)?.update;
   }
 
+  /**
+   * The newer version the last check found — never the one running now: the note of a check made before a switch
+   * stays until the next check, and it names the version this program already is.
+   */
+  available(): string | undefined {
+    const found = this.record()?.available;
+    return found !== undefined && newer(found, this.#version) ? found : undefined;
+  }
+
   /** Every ten minutes: the daily check when due, and at night the install. */
   start(): void {
     this.#timer = setInterval(() => void this.tick().catch((e: unknown) => this.#o.log(`update: ${message(e)}`)), 10 * 60_000);
@@ -101,14 +112,28 @@ export class Updater {
     const record = this.record();
     const since = record === undefined ? Infinity : now - Date.parse(record.checkedIso);
     if (since >= DAY_MS || (record?.ok === false && since >= HOUR_MS)) await this.check();
-    const state = readDesktopState(this.#o.paths.desktop);
-    const available = state?.update?.available;
-    if (state?.nightUpdates !== true || available === undefined || !nightWindow(now)) return;
+    const available = this.available();
+    if (readDesktopState(this.#o.paths.desktop)?.nightUpdates !== true || available === undefined || !nightWindow(now)) return;
     if (readRollback(this.#o.paths.versions)?.failed === available) return;
     if (now - this.#lastInstallTryMs < HOUR_MS || !this.#o.quiet(now, HOUR_MS)) return;
     this.#lastInstallTryMs = now;
     this.#o.log(`update: installing ${available} (night)`);
-    await this.install();
+    await this.install('night');
+  }
+
+  /**
+   * Whether the program may stop for the switch NOW — asked before the download and again right before the stamping
+   * stops (a download can take minutes): at night only inside the window, with the switch on and nobody stamping in
+   * the last hour; by the owner's button, whenever no card is on its way.
+   */
+  #mayStop(by: 'night' | 'button'): string | undefined {
+    const now = this.#o.now();
+    if (by === 'night') {
+      if (!nightWindow(now) || readDesktopState(this.#o.paths.desktop)?.nightUpdates !== true) return 'η νύχτα πέρασε ή οι νυχτερινές ενημερώσεις κλείστηκαν — την επόμενη νύχτα';
+      if (!this.#o.quiet(now, HOUR_MS)) return 'κάποιος χτύπησε την τελευταία ώρα — την επόμενη νύχτα';
+      return undefined;
+    }
+    return this.#o.quiet(now, 0) ? undefined : 'μια κάρτα είναι καθ’ οδόν προς την ΕΡΓΑΝΗ — δοκιμάστε σε λίγα λεπτά';
   }
 
   /** Ask GitHub for the newest release; note what was found (desktop.json). */
@@ -133,22 +158,15 @@ export class Updater {
   }
 
   /**
-   * Download, check and switch to the newest release. Returns only when it did NOT switch (the reason is noted and
-   * returned); after the switch the program ends.
+   * Download, check and switch to the newest release. Returns only when it did NOT switch — every such outcome is
+   * noted (the «Ενημερώσεις» page says why) and returned; after the switch the program ends.
    */
-  async install(): Promise<{ problem: string } | undefined> {
+  async install(by: 'night' | 'button' = 'button'): Promise<{ problem: string } | undefined> {
     if (this.#busy) return { problem: 'μια ενημέρωση είναι ήδη σε εξέλιξη' };
     this.#busy = true;
     try {
-      const release = await this.#newest();
-      if (release === undefined || !newer(release.verified.manifest.version, this.#version)) return { problem: 'δεν υπάρχει νεότερη έκδοση' };
-      if (!this.#o.quiet(this.#o.now(), 0)) return { problem: 'μια κάρτα είναι καθ’ οδόν προς την ΕΡΓΑΝΗ — δοκιμάστε σε λίγα λεπτά' };
-      const to = await this.#download(release);
-      await this.#switch(to);
-      return undefined;
-    } catch (error) {
-      const problem = message(error);
-      this.#o.log(`update failed — ${problem}`);
+      const problem = await this.#tryInstall(by);
+      if (problem === undefined) return undefined;
       const state = readDesktopState(this.#o.paths.desktop);
       if (state?.update !== undefined) {
         writeDesktopState(this.#o.paths.desktop, { ...state, update: { ...state.update, installProblem: { atIso: new Date(this.#o.now()).toISOString(), problem } } });
@@ -159,16 +177,41 @@ export class Updater {
     }
   }
 
+  /** The install itself: `undefined` once switched, otherwise why not. */
+  async #tryInstall(by: 'night' | 'button'): Promise<string | undefined> {
+    try {
+      const release = await this.#newest();
+      if (release === undefined || !newer(release.verified.manifest.version, this.#version)) return 'δεν υπάρχει νεότερη έκδοση';
+      const notNow = this.#mayStop(by);
+      if (notNow !== undefined) return notNow;
+      const to = await this.#download(release);
+      const notAnyMore = this.#mayStop(by);
+      if (notAnyMore !== undefined) {
+        this.#o.log(`update: ${to} downloaded, not switched — ${notAnyMore}`);
+        return notAnyMore;
+      }
+      await this.#switch(to);
+      return undefined;
+    } catch (error) {
+      const problem = message(error);
+      this.#o.log(`update failed — ${problem}`);
+      return problem;
+    }
+  }
+
   async #newest(): Promise<{ verified: VerifiedRelease; assets: Map<string, { url: string; size: number }> } | undefined> {
     const answer = await this.#get(`${this.#api}/repos/${REPOSITORY}/releases/latest`, 'application/vnd.github+json');
     if (answer.status === 404) return undefined; // no release yet
     if (!answer.ok) throw new Error(`το GitHub απάντησε ${answer.status}`);
-    const release = Release.parse(await answer.json());
+    const release = Release.parse(JSON.parse(Buffer.from(await capped(answer, SMALL_BYTES)).toString('utf8')));
     const assets = new Map(release.assets.map((a) => [a.name, { url: a.url, size: a.size }]));
+    // The workflow adds the signed list last: a release without it is still being built (or its build failed) — for
+    // an installed copy, nothing new yet, not a failed check.
+    if (!assets.has('SHA256SUMS') || !assets.has('SHA256SUMS.sig')) return undefined;
     const small = async (name: string) => {
       const asset = assets.get(name);
       if (asset === undefined) throw new Error(`η έκδοση δεν έχει ${name}`);
-      return this.#asset(asset, 1024 * 1024);
+      return this.#asset(asset, SMALL_BYTES);
     };
     const verified = verifiedRelease(
       { sums: await small('SHA256SUMS'), signature: Buffer.from(await small('SHA256SUMS.sig')).toString('utf8'), manifest: await small('manifest.json') },
@@ -222,8 +265,9 @@ export class Updater {
   async #switch(to: string): Promise<void> {
     const versions = this.#o.paths.versions;
     this.#o.log(`update: switching ${this.#version} → ${to}`);
-    await this.#o.stopServices();
     try {
+      // Inside: a stop that fails half-way still ends in the restart, so the staff page never stays dark.
+      await this.#o.stopServices();
       const snapshot = join(versionDir(versions, to), '.snapshot');
       snapshotStores(this.#o.paths, snapshot);
       writePending(versions, { from: this.#version, to, snapshot, atIso: new Date(this.#o.now()).toISOString() });
@@ -260,9 +304,7 @@ export class Updater {
   async #asset(asset: { url: string; size: number }, max: number): Promise<Uint8Array> {
     const answer = await this.#get(this.#assetUrl(asset, max), 'application/octet-stream');
     if (!answer.ok) throw new Error(`το GitHub απάντησε ${answer.status}`);
-    const bytes = new Uint8Array(await answer.arrayBuffer());
-    if (bytes.length > max) throw new Error('αρχείο έκδοσης πολύ μεγάλο');
-    return bytes;
+    return capped(answer, max);
   }
 
   /** Stream a release file to disk (gunzipped if asked), returning the sha256 of the bytes as downloaded. */
@@ -291,6 +333,28 @@ export class Updater {
     await (gunzip ? pipeline(body, tap, createGunzip(), cap, out) : pipeline(body, tap, out));
     return hash.digest('hex');
   }
+}
+
+/**
+ * An answer's body, read chunk by chunk and abandoned the moment it passes `max` — whatever the answer claims its size
+ * is. (Everything is read before its signature is checked, so nothing unbounded is ever held.)
+ */
+export async function capped(answer: Response, max: number): Promise<Uint8Array> {
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  if (answer.body === null) return new Uint8Array();
+  const reader = answer.body.getReader();
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.length;
+    if (size > max) {
+      await reader.cancel();
+      throw new Error('απάντηση πολύ μεγάλη');
+    }
+    chunks.push(value);
+  }
+  return new Uint8Array(Buffer.concat(chunks));
 }
 
 /** 02:00–05:00, Athens time — when a practice is closed. */

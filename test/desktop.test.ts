@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { startErganiFake, type ErganiFake } from './fake/ergani-fake.js';
 import { AFM } from './fixtures/people.js';
 import { VERSION } from '../src/version.js';
+import { PORT_TAKEN } from '../src/update/versions.js';
 
 /**
  * THE DESKTOP PROGRAM, end to end — `ergani desktop` as its own process, as on a practice's computer, with its data in
@@ -33,7 +34,7 @@ async function freePort(): Promise<number> {
 
 async function startDesktop(env: NodeJS.ProcessEnv): Promise<ChildProcess> {
   const cli = new URL('../src/cli.ts', import.meta.url).pathname;
-  const child = spawn(process.execPath, ['--import', 'tsx', cli, 'desktop', '--no-browser'], {
+  const child = spawn(process.execPath, ['--import', 'tsx', cli, 'desktop', '--no-browser', '--no-open'], {
     env: { PATH: process.env['PATH'], ...env },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -91,6 +92,9 @@ describe('ergani desktop — from an empty folder to a working page', () => {
 
     // First run: only the setup answers.
     expect((await get('/')).headers.get('location')).toBe('/setup');
+    // Browsers send the page's Origin on its forms only under a referrer policy that allows it (no-referrer ⇒
+    // «Origin: null» in Chrome and Edge, refused below): the pages must say same-origin.
+    expect((await get('/setup')).headers.get('referrer-policy')).toBe('same-origin');
     const setupPage = await (await get('/setup')).text();
     expect(setupPage).toContain('Πρώτη ρύθμιση');
     expect(setupPage).toContain('Φτιαγμένο από την Odontia');
@@ -105,7 +109,7 @@ describe('ergani desktop — from an empty folder to a working page', () => {
       terms: 'on', label: 'Οδοντιατρείο Δοκιμής', afm: AFM.employer, rows: '1',
       b0_code: '0', b0_label: '', b0_user: 'fixture01', b0_pass: 'Fixture.p1', b0_pass2: 'Fixture.p1', b0_email: '',
       address: '127.0.0.1', port: String(staffPort), realm: 'trial', from: new Date().toISOString().slice(0, 7),
-      owner: 'a long owner password', owner2: 'a long owner password', save: '1',
+      owner: 'a long owner password', owner2: 'a long owner password', alerts: 'on', save: '1',
     };
     // Without the terms, refused — and the passwords are not written back into the page.
     const refused = await (await post('/setup', { ...answers, terms: '' })).text();
@@ -151,6 +155,24 @@ describe('ergani desktop — from an empty folder to a working page', () => {
     const board = (await (await fetch(`http://127.0.0.1:${staffPort}/api/board`, { headers: { cookie: deviceCookie } })).json()) as { staff: Array<{ name: string }> };
     expect(board.staff.map((p) => p.name)).toEqual(['Άλφα']);
 
+    // A person's records: exactly the folder THIS request made — the second person exported after the first gets
+    // their own, never «the newest by name» (kartes-2-… sorts after kartes-1-…).
+    await post('/staff', { ...person, afm: AFM.vita, surname: 'Παράδειγμα', first: 'Βήτα', display: 'Βήτα', csrf: csrf! }, { cookie });
+    const ids = [...(await (await get('/records', { cookie })).text()).matchAll(/<option value="(\d{9})">/g)].map((m) => m[1]);
+    expect(ids).toEqual(expect.arrayContaining([AFM.alfa, AFM.vita]));
+    await post('/records', { afm: AFM.vita, from: '', to: '', csrf: csrf! }, { cookie });
+    const alfaRecords = await (await post('/records', { afm: AFM.alfa, from: '', to: '', csrf: csrf! }, { cookie })).text();
+    expect(/<code>([^<]+)<\/code>/.exec(alfaRecords)?.[1]).toMatch(/[\\/]kartes-1-[^\\/]+$/);
+    expect(JSON.parse(readFileSync(join(data, 'desktop.json'), 'utf8')).storesSince).toBeDefined();
+
+    // The easy phone alerts, ticked at setup: the page shows the QR of a random ntfy.sh topic (no ΔΟΚΙΜΗ here: it
+    // would reach ntfy.sh).
+    const alertsPage = await (await get('/alerts', { cookie })).text();
+    const topic = /<code>(karta-[A-Za-z0-9_-]{24,})<\/code>/.exec(alertsPage)?.[1];
+    expect(topic).toBeDefined();
+    expect(alertsPage).toContain('<svg xmlns="http://www.w3.org/2000/svg"');
+    expect(JSON.parse(readFileSync(join(data, 'desktop.json'), 'utf8')).alerts.topic).toBe(topic);
+
     // A backup to a chosen folder (a stick, the Dropbox folder) — written at once, and noted on the home page.
     const stick = mkdtempSync(join(tmpdir(), 'karta-stick-'));
     cleanup.push(() => rmSync(stick, { recursive: true, force: true }));
@@ -195,4 +217,36 @@ describe('ergani desktop — from an empty folder to a working page', () => {
     expect(existsSync(join(versions, 'pending.json'))).toBe(true);
     expect(await fetch(`http://127.0.0.1:${staffPort}/health`).then(() => 'answered', () => 'closed')).toBe('closed');
   }, 60_000);
+
+  it('a newer version on probation where nothing is set up yet (a newer installer before the setup): it passes at once', async () => {
+    const data = mkdtempSync(join(tmpdir(), 'karta-desktop-'));
+    cleanup.push(() => rmSync(data, { recursive: true, force: true }));
+    const versions = join(data, 'versions');
+    mkdirSync(versions, { recursive: true });
+    writeFileSync(join(versions, 'pending.json'), JSON.stringify({ from: '0.0.1', to: VERSION, atIso: new Date().toISOString() }));
+    writeFileSync(join(versions, 'current'), `${VERSION}\n`);
+    await startDesktop({ KARTA_DATA_DIR: data, KARTA_OWNER_PORT: String(await freePort()), KARTA_LAUNCHER: '1' });
+    await until(async () => !existsSync(join(versions, 'pending.json')), 'the probation passed');
+    expect(readFileSync(join(versions, 'previous'), 'utf8').trim()).toBe('0.0.1');
+  }, 30_000);
+
+  it('the owner’s port already taken: under the launcher it ends with PORT_TAKEN (no version to blame); on its own, with an error', async () => {
+    const data = mkdtempSync(join(tmpdir(), 'karta-desktop-'));
+    cleanup.push(() => rmSync(data, { recursive: true, force: true }));
+    const holder = createServer();
+    await new Promise<void>((resolve) => holder.listen(0, '127.0.0.1', resolve));
+    cleanup.push(() => new Promise<void>((resolve) => holder.close(() => resolve())));
+    const port = (holder.address() as { port: number }).port;
+    const cli = new URL('../src/cli.ts', import.meta.url).pathname;
+    const end = (env: NodeJS.ProcessEnv) =>
+      new Promise<number | null>((resolve) => {
+        const child = spawn(process.execPath, ['--import', 'tsx', cli, 'desktop', '--no-browser', '--no-open'], {
+          env: { PATH: process.env['PATH'], KARTA_DATA_DIR: data, KARTA_OWNER_PORT: String(port), ...env },
+          stdio: 'ignore',
+        });
+        child.once('exit', (code) => resolve(code));
+      });
+    expect(await end({ KARTA_LAUNCHER: '1' })).toBe(PORT_TAKEN);
+    expect(await end({})).toBe(1);
+  }, 30_000);
 });

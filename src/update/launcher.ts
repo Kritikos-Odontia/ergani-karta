@@ -7,8 +7,10 @@ import { join } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { openInBrowser } from '../desktop/open.js';
 import { dataDir, desktopPaths, ownerPort, type DesktopPaths } from '../desktop/paths.js';
+import { StoreLock } from '../stamp/store-lock.js';
 import { newer } from './release.js';
 import {
+  PORT_TAKEN,
   PROBATION_MS,
   RESTART,
   VersionFile,
@@ -49,6 +51,8 @@ export interface LauncherOptions {
   probationMs?: number;
   /** A version that stops sooner than this after its start has «stopped at start». */
   startWindowMs?: number;
+  /** How long to wait before trying again when the owner's port was taken (PORT_TAKEN). */
+  portRetryMs?: number;
 }
 
 export const STOP_GRACE_MS = 90_000;
@@ -57,9 +61,18 @@ export async function runLauncher(o: LauncherOptions): Promise<number> {
   const now = o.now ?? Date.now;
   const probationMs = o.probationMs ?? PROBATION_MS;
   const startWindowMs = o.startWindowMs ?? 60_000;
+  const portRetryMs = o.portRetryMs ?? 60_000;
   const paths = desktopPaths(dataDir(o.env));
   mkdirSync(paths.versions, { recursive: true, mode: 0o700 });
   const log = launcherLog(paths, now);
+  // ONE launcher per data folder, held until this process ends (the store lock's own mechanism, on a file of its own):
+  // a second one — the icon clicked again where no system service runs the launcher — leaves at once, before it can
+  // start a second copy of the program whose quick ends would read as a version that keeps stopping at start.
+  const only = StoreLock.take(join(paths.versions, 'launcher'));
+  if (only === undefined) {
+    log('another launcher already runs the program — this one leaves');
+    return 0;
+  }
   log(`launcher started (${o.install})`);
 
   let stopping = false;
@@ -76,6 +89,7 @@ export async function runLauncher(o: LauncherOptions): Promise<number> {
   let failedStarts = 0;
   while (!stopping) {
     const version = await ensureCurrent(o, paths, now, log);
+    if (stopping) break; // stopped while the installer's copy was being put in place: start nothing
     if (version === undefined) {
       log('no version to run — trying again in a minute');
       await sleep(60_000);
@@ -118,6 +132,11 @@ export async function runLauncher(o: LauncherOptions): Promise<number> {
       failedStarts = 0;
       continue;
     }
+    if (code === PORT_TAKEN) {
+      log(`${version} found the owner's port taken — trying again in ${Math.round(portRetryMs / 1000)} s`);
+      await sleep(portRetryMs);
+      continue;
+    }
     const pending = readPending(paths.versions);
     if (pending?.to === version) {
       rollBack(paths, pending, `η έκδοση ${version} δεν ξεκίνησε σωστά (κωδικός ${code ?? '—'})`, now, log);
@@ -133,6 +152,7 @@ export async function runLauncher(o: LauncherOptions): Promise<number> {
     await sleep(Math.min(60_000, 1_000 * 2 ** failedStarts));
   }
   log('launcher stopped');
+  only.release();
   return 0;
 }
 
@@ -233,21 +253,22 @@ export const LINUX_UNIT = 'karta-ergasias.service';
 /**
  * Make sure the program runs, then open the owner's page once it answers (a minute at most; then open it anyway, and
  * the browser says it is not there yet). Windows: the starter already runs it. Mac: the LaunchAgent is written (or
- * rewritten when the program moved) and started. Linux: the systemd user service is started.
+ * rewritten when the program moved) and started. Linux: when the page does not answer yet, the systemd user service
+ * is started (or, with no systemd, a launcher of its own — a second one leaves at once, runLauncher).
  */
 export async function openOwnerPage(o: LauncherOptions): Promise<number> {
   const paths = desktopPaths(dataDir(o.env));
   mkdirSync(paths.root, { recursive: true, mode: 0o700 });
   const log = launcherLog(paths, o.now ?? Date.now);
+  const url = `http://127.0.0.1:${ownerPort(o.env)}/`;
   if (process.platform === 'darwin') ensureMacAgent(o, log);
-  if (process.platform === 'linux') {
+  if (process.platform === 'linux' && !(await answers(url))) {
     const started = spawnSync('systemctl', ['--user', 'start', LINUX_UNIT], { stdio: 'ignore' });
     if (started.status !== 0) {
       // No systemd user session (another kind of Linux): start it here, on its own.
       spawn(o.runtime, [join(o.install, 'launcher.mjs'), 'run'], { detached: true, stdio: 'ignore', env: o.env }).unref();
     }
   }
-  const url = `http://127.0.0.1:${ownerPort(o.env)}/`;
   for (let i = 0; i < 120 && !(await answers(url)); i += 1) await sleep(500);
   openInBrowser(url, log);
   return 0;
@@ -301,6 +322,7 @@ ${args.map((a) => `    <string>${xml(a)}</string>`).join('\n')}
   </array>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
+  <key>ExitTimeOut</key><integer>100</integer>
 </dict>
 </plist>
 `;

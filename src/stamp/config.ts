@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 import { isAbsolute } from 'node:path';
 import { Secret, branchCodesOf, loadEmployerConfig, type EmployerConfig } from '../config.js';
+import { EASY_TOPIC, isPublicNtfy } from './notify.js';
 
 /**
  * The stamping service's own settings, beside the ΕΡΓΑΝΗ ones (`loadEmployerConfig`, src/config.ts).
@@ -53,6 +54,11 @@ export interface StampSettings {
    * ntfy.sh). Both or neither. ⛔ Never logged, never echoed. Unset ⇒ no push; the page shows everything.
    */
   ntfy: { url: Secret; token: Secret } | undefined;
+  /**
+   * The EASY mode instead (`NTFY_EASY_TOPIC`): nameless pushes to a long random topic on the public ntfy.sh — fixed
+   * sentences only, never a name (notify.ts `namelessSender`). Not with `NTFY_URL`: one or the other.
+   */
+  easyTopic: string | undefined;
   /** A monitor's push URL, called every minute while the outbox is healthy (heartbeat.ts). ⛔ Never logged. */
   heartbeatUrl: Secret | undefined;
 }
@@ -117,8 +123,16 @@ export function loadStampSettings(env: NodeJS.ProcessEnv = process.env): StampSe
     throw new Error('NTFY_URL must be https://<your ntfy server>/<topic>.');
   }
   // ⚠ The host as DNS reads it: «ntfy.sh.» (a trailing dot) is the same public server, so the dots go before the check.
-  if (ntfyUrl !== undefined && /(^|\.)ntfy\.sh$/i.test(new URL(ntfyUrl).hostname.replace(/\.+$/, ''))) {
+  if (ntfyUrl !== undefined && isPublicNtfy(new URL(ntfyUrl).hostname)) {
     throw new Error('NTFY_URL must be your own ntfy server, never ntfy.sh: on its free tier anyone who knows a topic reads it, and a push names the person.');
+  }
+
+  const easyTopic = env.NTFY_EASY_TOPIC;
+  if (easyTopic !== undefined && ntfyUrl !== undefined) {
+    throw new Error('NTFY_EASY_TOPIC (nameless pushes) and NTFY_URL (your own server) are one or the other.');
+  }
+  if (easyTopic !== undefined && !EASY_TOPIC.test(easyTopic)) {
+    throw new Error('NTFY_EASY_TOPIC must be karta- followed by 24 or more random letters and digits.');
   }
 
   return {
@@ -133,6 +147,7 @@ export function loadStampSettings(env: NodeJS.ProcessEnv = process.env): StampSe
       ntfyUrl !== undefined && ntfyToken !== undefined
         ? { url: new Secret(ntfyUrl), token: new Secret(ntfyToken) }
         : undefined,
+    easyTopic,
     heartbeatUrl: heartbeatUrlOf(env, 'STAMP_HEARTBEAT_URL'),
   };
 }

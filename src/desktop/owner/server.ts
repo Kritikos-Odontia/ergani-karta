@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { dirname } from 'node:path';
 import { settingsFile } from '../../setup/settings.js';
+import { newEasyTopic } from '../../stamp/notify.js';
 import type { DesktopPaths } from '../paths.js';
 import { readDesktopState, writeDesktopState, type DesktopState } from '../state.js';
 import { OwnerSessions, hashPassword, sameToken } from './auth.js';
@@ -47,7 +48,9 @@ const HEADERS = {
   'content-security-policy':
     "default-src 'none'; style-src 'self'; img-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
   'x-content-type-options': 'nosniff',
-  'referrer-policy': 'no-referrer',
+  // same-origin, not no-referrer: with no-referrer, Chrome and Edge send «Origin: null» on these forms, and the
+  // Origin check below refuses them all. Links out (the maker's site, ntfy.sh) still carry no referrer.
+  'referrer-policy': 'same-origin',
   'cache-control': 'no-store',
 } as const;
 
@@ -175,7 +178,11 @@ function loginPage(message: Html = html``): string {
 export function saveSetup(paths: DesktopPaths, form: SetupForm, nowIso: string): void {
   mkdirSync(dirname(paths.settings), { recursive: true, mode: 0o700 });
   writeFileSync(paths.settings, settingsFile(form.answers, nowIso), { mode: 0o600 });
-  const state: DesktopState = { ownerPassword: hashPassword(form.ownerPassword), nightUpdates: true };
+  const state: DesktopState = {
+    ownerPassword: hashPassword(form.ownerPassword),
+    nightUpdates: true,
+    ...(form.alerts ? { alerts: { topic: newEasyTopic() } } : {}),
+  };
   writeDesktopState(paths.desktop, state);
 }
 

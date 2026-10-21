@@ -28,6 +28,10 @@ export const DesktopState = z.object({
     .object({ atIso: z.string(), ok: z.boolean(), problem: z.string().optional() })
     .optional(),
   update: UpdateRecord.optional(),
+  /** The easy phone alerts: the random ntfy.sh topic (stamp/notify.ts — nameless pushes only). Unset: off. */
+  alerts: z.object({ topic: z.string() }).optional(),
+  /** When the two stores were first made. From then on a missing store is a lost record, never made again empty. */
+  storesSince: z.string().optional(),
 });
 export type DesktopState = z.infer<typeof DesktopState>;
 

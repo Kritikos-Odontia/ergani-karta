@@ -25,6 +25,8 @@ export function privateAddresses(): Array<{ address: string; name: string }> {
 export interface SetupForm {
   answers: SetupAnswers;
   ownerPassword: string;
+  /** The easy phone alerts (nameless, through ntfy.sh): the owner's page «Ειδοποιήσεις» shows the QR. */
+  alerts: boolean;
   /** Problems with what only this page asks: the terms, the owner password, the real-register confirmation. */
   ownProblems: string[];
   rows: number;
@@ -78,6 +80,7 @@ export function readSetupForm(form: URLSearchParams, todayMonth: string): SetupF
       archiveFrom: get('from') || todayMonth,
     },
     ownerPassword,
+    alerts: form.get('alerts') === 'on',
     ownProblems,
     rows: Math.max(rows, branches.length),
   };
@@ -95,6 +98,7 @@ const blank = (todayMonth: string): SetupForm => ({
     stampHeartbeatUrl: '', archiveHeartbeatUrl: '', archiveFrom: todayMonth,
   },
   ownerPassword: '',
+  alerts: false,
   ownProblems: [],
   rows: 1,
 });
@@ -176,6 +180,12 @@ ${addressChoices.map(({ address, name }) => html`<p class="check"><input type="r
 <input type="password" id="owner" name="owner" autocomplete="new-password">
 <label for="owner2">Ο ίδιος ξανά</label>
 <input type="password" id="owner2" name="owner2" autocomplete="new-password">
+</fieldset>
+<fieldset><legend>Ειδοποιήσεις στο κινητό σας</legend>
+<p class="check"><input type="checkbox" id="alerts" name="alerts"${checked(form.alerts)}>
+<label for="alerts">Ναι — όταν μια κάρτα δεν στάλθηκε ή κάποιος δεν χτύπησε, ένα σύντομο μήνυμα στο κινητό μου, <strong>χωρίς
+ονόματα</strong> («δείτε τη σελίδα στο ιατρείο»). Δωρεάν, με την εφαρμογή ntfy· μετά τη ρύθμιση, η σελίδα «Ειδοποιήσεις» δείχνει
+το QR και στέλνει μια ΔΟΚΙΜΗ.</label></p>
 </fieldset>
 <p><button name="save" value="1">Αποθήκευση</button></p>
 </form>

@@ -17,10 +17,11 @@ import { openInBrowser } from './open.js';
 import { createOwnerServer, type OwnerPage } from './owner/server.js';
 import { dataDir, desktopPaths, ownerPort, type DesktopPaths } from './paths.js';
 import { serviceEnv } from './settings-file.js';
-import { readDesktopState } from './state.js';
+import { readDesktopState, writeDesktopState } from './state.js';
 import { Updater } from '../update/updater.js';
-import { commitProbation, readPending } from '../update/versions.js';
+import { PORT_TAKEN, commitProbation, readPending } from '../update/versions.js';
 import { cardsOnTheirWay } from '../stamp/outbox.js';
+import { namelessSender, type PushSender } from '../stamp/notify.js';
 import { VERSION } from '../version.js';
 
 /**
@@ -28,14 +29,15 @@ import { VERSION } from '../version.js';
  *   · the owner's pages on 127.0.0.1 (`OWNER_PORT`, paths.ts): the setup on first run, then the owner's pages (owner/);
  *   · once set up: the stamping service — the staff page, the outbox, the alarms — exactly as `ergani stamp`, and the
  *     monthly archive's daily run exactly as `ergani archive`, with this computer's settings (settings-file.ts);
- *   · it opens the owner's page in the browser when it starts (`--no-browser`: not);
+ *   · it opens the owner's page in the browser when it starts (`--no-browser`: not); `--no-open` opens nothing at all,
+ *     not even an employee's records folder for the owner (the tests; a computer without a screen);
  *   · run by the launcher (`KARTA_LAUNCHER=1`, update/launcher.ts): the updater (update/updater.ts), and the probation
  *     of a version just switched to — it passes when the stamping service is built, right before its outbox starts;
  *     if it does not, the program ends and the launcher undoes the switch (update/versions.ts).
  * ⓘ The services are the gated ones, unchanged: this file only gives them their settings and starts them.
  */
 export async function runDesktop(argv: readonly string[], outside: NodeJS.ProcessEnv = process.env): Promise<void> {
-  const { values } = parseArgs({ args: [...argv], options: { 'no-browser': { type: 'boolean', default: false } }, strict: true, allowPositionals: false });
+  const { values } = parseArgs({ args: [...argv], options: { 'no-browser': { type: 'boolean', default: false }, 'no-open': { type: 'boolean', default: false } }, strict: true, allowPositionals: false });
   const root = dataDir(outside);
   mkdirSync(root, { recursive: true, mode: 0o700 });
   const paths = desktopPaths(root);
@@ -55,8 +57,9 @@ export async function runDesktop(argv: readonly string[], outside: NodeJS.Proces
   let onProbation = pending?.to === VERSION;
   const passProbation = () => {
     if (!onProbation || pending === undefined) return;
-    // The record store opens (and takes this version's migrations) too, before anything is filed.
-    openRecordStore(paths.recordsDb).close();
+    // The record store opens (and takes this version's migrations) too, before anything is filed. Not set up yet,
+    // there is none to open.
+    if (existsSync(paths.recordsDb)) openRecordStore(paths.recordsDb).close();
     commitProbation(paths.versions, pending);
     onProbation = false;
     log(`update ${pending.from} → ${VERSION}: passed its checks`);
@@ -67,8 +70,16 @@ export async function runDesktop(argv: readonly string[], outside: NodeJS.Proces
   let updater: Updater | undefined;
   const start = async () => {
     const env = serviceEnv(paths, outside);
-    ensureStores(paths, env, new Date(now()).toISOString());
-    stamping = await runStampService(env, { onSignals: false, beforeStart: passProbation });
+    const nowIso = new Date(now()).toISOString();
+    const state = readDesktopState(paths.desktop);
+    ensureStores(paths, env, nowIso, state?.storesSince !== undefined);
+    if (state !== undefined && state.storesSince === undefined) writeDesktopState(paths.desktop, { ...state, storesSince: nowIso });
+    // The easy phone alerts, as the owner's «Ειδοποιήσεις» page sets them now (nameless: stamp/notify.ts).
+    const pushes: PushSender = async (push, key) => {
+      const topic = readDesktopState(paths.desktop)?.alerts?.topic;
+      if (topic !== undefined) await namelessSender(topic)(push, key);
+    };
+    stamping = await runStampService(env, { onSignals: false, beforeStart: passProbation, pushes, log: (line) => log(`stamp: ${line}`) });
     // The daily run loops for as long as the program runs; a failure of one run is its own (records/cli.ts).
     runArchive([], env, (line) => log(`archive: ${line}`)).catch((error: unknown) =>
       log(`archive stopped — ${error instanceof Error ? error.message : String(error)}`),
@@ -89,7 +100,7 @@ export async function runDesktop(argv: readonly string[], outside: NodeJS.Proces
       });
       updater.start();
     }
-    pages = ownerPages({ paths, env, now, log, erganiSilentSince: (t) => running.silentSinceMs(t), updater });
+    pages = ownerPages({ paths, env, now, log, erganiSilentSince: (t) => running.silentSinceMs(t), staffPageProblem: () => running.pageProblem(), updater, openFolders: !values['no-open'] });
     // The daily backup: looked at every hour, run when a day has passed since the last good one (backup.ts).
     setInterval(() => {
       const state = readDesktopState(paths.desktop);
@@ -106,10 +117,17 @@ export async function runDesktop(argv: readonly string[], outside: NodeJS.Proces
     guide: GUIDE_PAGE,
     mark: makerMark(),
   });
-  await new Promise<void>((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(ownerPort(outside), '127.0.0.1', resolve);
-  });
+  try {
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(ownerPort(outside), '127.0.0.1', resolve);
+    });
+  } catch (error) {
+    if (!launched || (error as NodeJS.ErrnoException).code !== 'EADDRINUSE') throw error;
+    // Before any store is opened: the launcher tries again later and blames no version (versions.ts PORT_TAKEN).
+    log(`the owner pages' port ${ownerPort(outside)} is taken — by another copy of the program or another program`);
+    process.exit(PORT_TAKEN);
+  }
   const ownerUrl = `http://127.0.0.1:${ownerPort(outside)}/`;
   log(`owner pages on ${ownerUrl}`);
 
@@ -143,7 +161,7 @@ export async function runDesktop(argv: readonly string[], outside: NodeJS.Proces
   } else {
     passProbation(); // not set up yet: nothing to check
   }
-  if (!values['no-browser']) openInBrowser(ownerUrl, log);
+  if (!values['no-browser'] && !values['no-open']) openInBrowser(ownerUrl, log);
 }
 
 /**
@@ -155,6 +173,7 @@ export function quietForUpdate(paths: DesktopPaths, nowMs: number, sinceMs: numb
   const { DatabaseSync } = process.getBuiltinModule('node:sqlite') as typeof import('node:sqlite');
   const db = new DatabaseSync(paths.stampDb, { readOnly: true });
   try {
+    db.exec('PRAGMA busy_timeout = 5000');
     if (cardsOnTheirWay(db, nowMs) > 0) return false;
     const last = db.prepare('SELECT MAX(event_ms) AS last FROM punches').get() as { last: number | null };
     return sinceMs === 0 || last.last === null || nowMs - last.last >= sinceMs;
@@ -163,8 +182,19 @@ export function quietForUpdate(paths: DesktopPaths, nowMs: number, sinceMs: numb
   }
 }
 
-/** Make whichever store is missing — the first start after setup; never touches one that exists. */
-export function ensureStores(paths: DesktopPaths, env: NodeJS.ProcessEnv, nowIso: string): void {
+/**
+ * Make the stores on the first start after setup; never touch one that exists. ⛔ Once made (`established`), a missing
+ * store is the employer's record lost — the program refuses to start and says to restore it from a backup, instead of
+ * carrying on with an empty one that hides the loss.
+ */
+export function ensureStores(paths: DesktopPaths, env: NodeJS.ProcessEnv, nowIso: string, established: boolean): void {
+  if (established) {
+    const missing = [paths.stampDb, paths.recordsDb].filter((store) => !existsSync(store));
+    if (missing.length > 0) {
+      throw new Error(`λείπει το αρχείο ${missing.join(', ')} — κλείστε το πρόγραμμα και επαναφέρετέ το από το τελευταίο αντίγραφο ασφαλείας (σελίδα «Αντίγραφα»)`);
+    }
+    return;
+  }
   const ergani = loadEmployerConfig(env);
   const stamp = loadStampSettings(env);
   if (!existsSync(paths.stampDb)) {

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: EUPL-1.2
-import { readdirSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { WorkCardDelayReason } from '../../ergani/types.js';
 import { adminCommand } from '../../stamp/admin.js';
@@ -20,6 +20,7 @@ import type { Updater } from '../../update/updater.js';
 import { newer } from '../../update/release.js';
 import { readRollback } from '../../update/versions.js';
 import { VERSION } from '../../version.js';
+import { EASY_SERVER, namelessSender, newEasyTopic } from '../../stamp/notify.js';
 // `Html` is markup this program built itself — here, the QR code's SVG (qr.ts); everything else is escaped.
 import { Html, csrfField, html, note, page } from './html.js';
 import type { OwnerPage } from './server.js';
@@ -43,8 +44,12 @@ export interface PagesContext {
   log: (line: string) => void;
   /** Since when ΕΡΓΑΝΗ has not answered (10 minutes or more), from the stamping service (stamp/reach.ts). */
   erganiSilentSince: (nowMs: number) => number | undefined;
+  /** Why the staff page is not open now (the listen error's code), from the stamping service; undefined when it is. */
+  staffPageProblem?: () => string | undefined;
   /** Present when the launcher runs the program (the installed program); absent otherwise — no updates then. */
   updater?: Updater | undefined;
+  /** Open an employee's records folder with the system's file browser (not under `--no-open`). */
+  openFolders?: boolean;
 }
 
 const when = (iso: string) => new Date(iso).toLocaleString('el-GR', { timeZone: 'Europe/Athens' });
@@ -73,13 +78,17 @@ export function ownerPages(c: PagesContext): ReadonlyMap<string, OwnerPage> {
     const state = readDesktopState(c.paths.desktop);
     const backup = state?.lastBackup;
     const silent = c.erganiSilentSince(now);
+    const pageProblem = c.staffPageProblem?.();
+    const available = c.updater?.available();
+    const byItself = state?.nightUpdates === true && readRollback(c.paths.versions)?.failed !== available;
     return done('Αρχική', csrf, html`
 ${ergani.erganiRealm === 'production' ? html`` : note('warn', html`Ρυθμισμένο για το <strong>${ergani.erganiRealm === 'trial' ? 'δοκιμαστικό' : 'δοκιμαστικό (τοπικό)'}</strong> περιβάλλον: ό,τι δηλώνεται δεν είναι πραγματική δήλωση.`)}
 ${silent === undefined ? html`` : note('bad', `Ο υπολογιστής δεν φτάνει την ΕΡΓΑΝΗ από τις ${athensTime(silent).time.slice(0, 5)} (${athensTime(silent).date}). Οι κάρτες κρατιούνται και στέλνονται μόλις επανέλθει· αν μια κάρτα περάσει τα 15 λεπτά, ειδοποιήστε την Επιθεώρηση Εργασίας όταν αρχίζει και όταν τελειώνει το πρόβλημα.`)}
+${pageProblem === undefined ? html`` : note('bad', `Η σελίδα των εργαζομένων δεν ανοίγει στο ${pageAddress}: ${pageProblem === 'EADDRNOTAVAIL' ? 'αυτή η διεύθυνση δεν υπάρχει τώρα σε αυτόν τον υπολογιστή (δεν έχει συνδεθεί ακόμη στο δίκτυο του ιατρείου, ή ο router του έδωσε άλλη)' : pageProblem === 'EADDRINUSE' ? 'τη θύρα την κρατά ήδη άλλο πρόγραμμα' : pageProblem}. Ξαναδοκιμάζει μόνο του κάθε μισό λεπτό· οι κάρτες που περιμένουν στέλνονται κανονικά.`)}
 ${waiting > 0 ? note('bad', html`${waiting} κάρτα/-ες χρειάζονται απόφαση: <a href="/queue">Εκκρεμότητες</a>.`) : note('ok', 'Καμία κάρτα δεν περιμένει απόφαση.')}
 ${backup === undefined ? note('warn', html`Δεν έχει γίνει ακόμη αντίγραφο ασφαλείας: <a href="/backup">Αντίγραφα</a>.`) : backup.ok ? note('ok', `Τελευταίο αντίγραφο: ${when(backup.atIso)}.`) : note('bad', `Το τελευταίο αντίγραφο απέτυχε: ${backup.problem ?? ''}`)}
 ${rolledBack()}
-${state?.update?.available === undefined || c.updater === undefined ? html`` : note('warn', html`Νέα έκδοση ${state.update.available}: ${state.nightUpdates ? 'εγκαθίσταται μόνη της τη νύχτα, ή ' : ''}<a href="/updates">Ενημερώσεις</a>.`)}
+${available === undefined ? html`` : note('warn', html`Νέα έκδοση ${available}: ${byItself ? 'εγκαθίσταται μόνη της τη νύχτα, ή ' : ''}<a href="/updates">Ενημερώσεις</a>.`)}
 <p>Η σελίδα των εργαζομένων: <strong>${pageAddress}</strong>${settings.listenHost === '127.0.0.1' ? ' (μόνο σε αυτόν τον υπολογιστή)' : ''}.</p>
 <p><a href="/check">Έλεγχος σύνδεσης με την ΕΡΓΑΝΗ</a> — μόνο ανάγνωση: για κάθε παράρτημα, αν ο χρήστης του συνδέεται και αν του επιτρέπεται η δήλωση κάρτας.</p>`);
   };
@@ -241,11 +250,14 @@ ${missing.length > 0 ? note('warn', `${missing.length} κάρτα/-ες στάλ
         const to = (form.get('to') ?? '').trim();
         if (from !== '') argv.push('--from', from);
         if (to !== '') argv.push('--to', to);
+        // ⛔ Exactly the folder THIS request made (admin.ts makes a new one per request) — never «the newest by name»,
+        // which can be another person's: the owner hands this folder to one person.
+        const before = new Set(existsSync(c.paths.exports) ? readdirSync(c.paths.exports) : []);
         await run(argv);
-        // The newest folder is this request's (admin.ts writes a new one per request).
-        const newest = readdirSync(c.paths.exports).sort().filter((name) => name.startsWith('kartes-')).at(-1);
-        const folder = newest === undefined ? c.paths.exports : join(c.paths.exports, newest);
-        openInBrowser(folder, c.log);
+        const made = readdirSync(c.paths.exports).filter((name) => !before.has(name));
+        if (made.length !== 1) throw new Error('δεν βρέθηκε ο φάκελος αυτής της αίτησης — δοκιμάστε ξανά');
+        const folder = join(c.paths.exports, made[0]!);
+        if (c.openFolders !== false) openInBrowser(folder, c.log);
         message = note('ok', html`Γράφτηκαν μια σελίδα (εκτυπώνεται) και ένα αρχείο λογιστικού φύλλου, μόνο με τις δικές του κάρτες, στον φάκελο:<br><code>${folder}</code><br>Ο φάκελος άνοιξε. Δώστε τα <strong>μόνο σε εκείνον</strong>, και σβήστε μετά τα αντίγραφα.`);
       } catch (error) {
         message = fail(error);
@@ -334,13 +346,14 @@ ${chosen === undefined ? html`` : html`<form method="post" action="/backup">${cs
     }
     const state = readDesktopState(c.paths.desktop);
     const record = state?.update;
+    const available = u.available();
     const night = state?.nightUpdates ?? true;
     return done('Ενημερώσεις', csrf, html`${message}
 <p>Έκδοση: <strong>${VERSION}</strong>.</p>
 ${rolledBack()}
 ${record === undefined ? html`<p>Δεν έχει γίνει ακόμη έλεγχος για νέα έκδοση (γίνεται μία φορά την ημέρα).</p>` : record.ok ? html`<p>Τελευταίος έλεγχος: ${when(record.checkedIso)}.</p>` : note('warn', `Ο τελευταίος έλεγχος (${when(record.checkedIso)}) απέτυχε: ${record.problem ?? ''}`)}
-${record?.installProblem === undefined ? html`` : note('warn', `Η τελευταία προσπάθεια ενημέρωσης (${when(record.installProblem.atIso)}) δεν έγινε: ${record.installProblem.problem}`)}
-${record?.available === undefined ? html`` : html`<form method="post" action="/updates"><fieldset><legend>Νέα έκδοση ${record.available}</legend>${csrfField(csrf)}<input type="hidden" name="do" value="install">
+${record?.installProblem === undefined || available === undefined ? html`` : note('warn', `Η τελευταία προσπάθεια ενημέρωσης (${when(record.installProblem.atIso)}) δεν έγινε: ${record.installProblem.problem}`)}
+${available === undefined ? html`` : html`<form method="post" action="/updates"><fieldset><legend>Νέα έκδοση ${available}</legend>${csrfField(csrf)}<input type="hidden" name="do" value="install">
 <p>Η σελίδα των εργαζομένων σταματά για ένα-δύο λεπτά. Αν η νέα έκδοση δεν ξεκινήσει σωστά, το πρόγραμμα γυρίζει μόνο του στην τωρινή.</p>
 <p><button>Ενημέρωση τώρα</button></p></fieldset></form>`}
 <form method="post" action="/updates">${csrfField(csrf)}<input type="hidden" name="do" value="check"><p><button class="secondary">Έλεγχος τώρα</button></p></form>
@@ -350,8 +363,64 @@ ${record?.available === undefined ? html`` : html`<form method="post" action="/u
 <p class="hint">Εγκαθίστανται μόνο εκδόσεις υπογεγραμμένες με το κλειδί του έργου. Ο έλεγχος είναι μία ερώτηση την ημέρα στο GitHub για τη νεότερη έκδοση· τίποτα άλλο δεν στέλνεται, σε κανέναν. Αν ο υπολογιστής είναι κλειστός τη νύχτα, πατήστε «Ενημέρωση τώρα» όταν το βολεύει.</p>`);
   };
 
+  /** The easy phone alerts: nameless pushes to a random ntfy.sh topic (stamp/notify.ts says why that is safe). */
+  const alerts: OwnerPage = async ({ method, form, csrf }) => {
+    let message = html``;
+    const state = readDesktopState(c.paths.desktop)!;
+    if (method === 'POST') {
+      switch (form.get('do')) {
+        case 'on':
+        case 'new':
+          writeDesktopState(c.paths.desktop, { ...state, alerts: { topic: newEasyTopic() } });
+          message = note('ok', form.get('do') === 'new' ? 'Νέο θέμα: σκανάρετε ξανά το QR σε κάθε κινητό· το παλιό δεν λαμβάνει πια τίποτα.' : 'Οι ειδοποιήσεις άνοιξαν. Σκανάρετε το QR με το κινητό σας.');
+          break;
+        case 'off': {
+          const { alerts: _off, ...rest } = state;
+          writeDesktopState(c.paths.desktop, rest);
+          message = note('ok', 'Οι ειδοποιήσεις έκλεισαν.');
+          break;
+        }
+        case 'test': {
+          const topic = state.alerts?.topic;
+          try {
+            if (topic === undefined) throw new Error('οι ειδοποιήσεις είναι κλειστές');
+            await namelessSender(topic)({ title: '', message: '', priority: 3 }, 'test');
+            message = note('ok', 'Η ΔΟΚΙΜΗ στάλθηκε — πρέπει να φτάσει στο κινητό σε λίγα δευτερόλεπτα.');
+          } catch (error) {
+            message = fail(error);
+          }
+          break;
+        }
+        default:
+          message = note('bad', 'Άγνωστη ενέργεια.');
+      }
+    }
+    const topic = readDesktopState(c.paths.desktop)?.alerts?.topic;
+    const button = (todo: string, label: string, secondary = true) =>
+      html`<form class="inline" method="post" action="/alerts">${csrfField(csrf)}<input type="hidden" name="do" value="${todo}"><button${secondary ? html` class="secondary"` : html``}>${label}</button></form> `;
+    if (topic === undefined) {
+      return done('Ειδοποιήσεις', csrf, html`${message}
+<p>Όταν μια κάρτα δεν στάλθηκε στην ΕΡΓΑΝΗ ή κάποιος δεν χτύπησε, ένα σύντομο μήνυμα στο κινητό σας — <strong>χωρίς ονόματα</strong>:
+«…δείτε τη σελίδα στο ιατρείο». Δωρεάν, με την εφαρμογή <strong>ntfy</strong> (Android, iPhone), μέσω της δημόσιας υπηρεσίας ntfy.sh.</p>
+<p>${button('on', 'Άνοιγμα', false)}</p>`);
+    }
+    const link = `${EASY_SERVER}/${topic}`;
+    return done('Ειδοποιήσεις', csrf, html`${message}
+${note('ok', 'Οι ειδοποιήσεις είναι ανοιχτές — χωρίς ονόματα.')}
+<ol>
+<li>Στο κινητό: εγκαταστήστε τη δωρεάν εφαρμογή <strong>ntfy</strong>.</li>
+<li>Σκανάρετε αυτό το QR με την κάμερα (ή, στην εφαρμογή, «+» και το θέμα από κάτω).</li>
+<li>Πατήστε «ΔΟΚΙΜΗ»: το μήνυμα πρέπει να φτάσει σε λίγα δευτερόλεπτα.</li>
+</ol>
+<p class="qr">${new Html(qrSvg(link))}</p><p>Θέμα: <code>${topic}</code></p>
+<p>${button('test', 'ΔΟΚΙΜΗ', false)}${button('new', 'Νέο θέμα')}${button('off', 'Κλείσιμο')}</p>
+<p class="hint">Τα μηνύματα δεν έχουν ονόματα, ΑΦΜ ή ώρες — μόνο «κάτι θέλει την προσοχή σας». Όποιος μάθει το θέμα μπορεί να τα
+διαβάσει· γι' αυτό είναι μακρύ και τυχαίο, και «Νέο θέμα» το αλλάζει. Τα ονόματα μένουν στη σελίδα του ιατρείου.</p>`);
+  };
+
   return new Map<string, OwnerPage>([
     ['/', home],
+    ['/alerts', alerts],
     ['/updates', updates],
     ['/staff', staff],
     ['/devices', devices],

@@ -37,7 +37,7 @@ if (behave.switchTo) {
     db.close();
   }
   writeFileSync(join(snapshot, 'complete'), '');
-  writeFileSync(join(versions, 'pending.json'), JSON.stringify({ from: version, to: behave.switchTo, snapshot, atIso: new Date().toISOString() }));
+  writeFileSync(join(versions, 'pending.json'), JSON.stringify({ from: version, to: behave.switchTo, snapshot, atIso: new Date().toISOString(), ...behave.pendingExtra }));
   writeFileSync(join(versions, 'current'), `${behave.switchTo}\n`);
   process.exit(75);
 }

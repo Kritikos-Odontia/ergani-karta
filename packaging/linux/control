@@ -1,8 +1,8 @@
 Package: karta-ergasias
 Version: @VERSION@
 Architecture: amd64
-Maintainer: ergani-karta <https://github.com/odontia/ergani-karta>
-Homepage: https://github.com/odontia/ergani-karta
+Maintainer: ergani-karta <https://github.com/Kritikos-Odontia/ergani-karta>
+Homepage: https://github.com/Kritikos-Odontia/ergani-karta
 Recommends: xdg-utils
 Section: misc
 Priority: optional

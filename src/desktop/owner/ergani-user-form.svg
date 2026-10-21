@@ -1,0 +1,37 @@
+<!-- SPDX-License-Identifier: EUPL-1.2 -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 430" width="680" height="430" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="14" role="img" aria-label="Σχέδιο της φόρμας «νέος Χρήστης Παραρτήματος» στην ΕΡΓΑΝΗ ΙΙ, με τις τέσσερις ρυθμίσεις">
+  <rect x="1" y="1" width="678" height="428" rx="10" fill="#ffffff" stroke="#c9d3d6"/>
+  <rect x="1" y="1" width="678" height="40" rx="10" fill="#eef3f4"/>
+  <text x="20" y="26" font-weight="600" fill="#1d2327">ΕΡΓΑΝΗ ΙΙ · Χρήστες Παραρτήματος · νέος χρήστης</text>
+  <text x="660" y="26" text-anchor="end" fill="#9a5b00" font-size="12">ΣΧΕΔΙΟ — όχι η πραγματική οθόνη</text>
+  <g fill="#1d2327">
+    <text x="20" y="72">Παράρτημα</text><rect x="230" y="56" width="220" height="24" rx="4" fill="#fff" stroke="#c9d3d6"/><text x="240" y="73">0 — Έδρα ▾</text>
+    <text x="20" y="106">Όνομα χρήστη</text><rect x="230" y="90" width="220" height="24" rx="4" fill="#fff" stroke="#c9d3d6"/><text x="240" y="107">iatreio_kentro</text>
+    <text x="20" y="140">Κωδικός (12 χαρακτήρες)</text><rect x="230" y="124" width="220" height="24" rx="4" fill="#fff" stroke="#c9d3d6"/><text x="240" y="141">••••••••••••</text>
+    <text x="20" y="178">Κατάσταση</text>
+    <circle cx="238" cy="173" r="6" fill="#0e5563"/><text x="252" y="178">Ανενεργός</text>
+    <circle cx="358" cy="173" r="6" fill="#fff" stroke="#888"/><text x="372" y="178" fill="#888">Ενεργός</text>
+    <text x="20" y="214">Διαθέσιμα Έντυπα</text>
+    <rect x="231" y="201" width="14" height="14" rx="2" fill="#0e5563"/><text x="234" y="213" fill="#fff" font-size="12">✓</text>
+    <text x="252" y="213" font-weight="600">Δήλωση έναρξης/λήξης εργασίας εργαζομένων</text>
+    <rect x="231" y="223" width="14" height="14" rx="2" fill="#fff" stroke="#888"/><text x="252" y="235" fill="#888">Αναγγελία πρόσληψης</text>
+    <rect x="231" y="245" width="14" height="14" rx="2" fill="#fff" stroke="#888"/><text x="252" y="257" fill="#888">Καταγγελία σύμβασης</text>
+    <rect x="231" y="267" width="14" height="14" rx="2" fill="#fff" stroke="#888"/><text x="252" y="279" fill="#888">… όλα τα άλλα έντυπα: ΟΧΙ</text>
+    <text x="20" y="314">Χρήση μόνο από Υπηρεσίες</text><text x="20" y="331">Διαλειτουργικότητας</text>
+    <circle cx="238" cy="317" r="6" fill="#0e5563"/><text x="252" y="322">Ναι</text>
+    <circle cx="318" cy="317" r="6" fill="#fff" stroke="#888"/><text x="332" y="322" fill="#888">Όχι</text>
+    <text x="20" y="364">Υποχρεωτική αλλαγή κωδικού</text>
+    <circle cx="238" cy="359" r="6" fill="#fff" stroke="#888"/><text x="252" y="364" fill="#888">Ναι</text>
+    <circle cx="318" cy="359" r="6" fill="#0e5563"/><text x="332" y="364">Όχι</text>
+  </g>
+  <g font-size="13" fill="#b3261e" font-weight="600">
+    <text x="470" y="178">① πρώτα Ανενεργός</text>
+    <text x="470" y="236">② ΜΟΝΟ αυτό το έντυπο</text>
+    <text x="470" y="254" font-weight="400">(κανένα = ΟΛΑ: προσλήψεις,</text>
+    <text x="470" y="270" font-weight="400">απολύσεις — ποτέ κενό)</text>
+    <text x="470" y="322">③ Ναι</text>
+    <text x="470" y="364">④ Όχι</text>
+  </g>
+  <rect x="20" y="384" width="640" height="32" rx="6" fill="#eaf6ee"/>
+  <text x="32" y="405" fill="#1f7a3d" font-weight="600">⑤ Αποθήκευση → ξαναφορτώστε → ελέγξτε ①–④ → μόνο τότε «Ενεργός»</text>
+</svg>

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
-import { html, page } from './html.js';
+import { Html, html, page } from './html.js';
+import { erganiUserForm } from '../../assets.js';
 
 /**
  * «Ο ΠΕΡΙΟΡΙΣΜΕΝΟΣ ΧΡΗΣΤΗΣ ΕΡΓΑΝΗ» — the step-by-step guide the setup page links to, served by the program itself
@@ -14,6 +15,7 @@ export const GUIDE_PAGE = page(
 μπορεί να υποβάλει <strong>όλα</strong> τα έντυπα — προσλήψεις και απολύσεις μαζί. Επιλέξτε το έντυπο ρητά, και ελέγξτε το.</p>
 <p>Χρειάζεστε τους κύριους κωδικούς του εργοδότη στην ΕΡΓΑΝΗ (συχνά τους έχει ο λογιστής) — μόνο για αυτό το βήμα, στην
 πύλη. Δεν δίνονται ποτέ στο πρόγραμμα.</p>
+<p class="qr">${new Html(erganiUserForm())}</p>
 <ol>
 <li>Είσοδος στην ΕΡΓΑΝΗ ΙΙ με τους κύριους κωδικούς → <strong>Χρήστες Παραρτήματος</strong> → <strong>νέος χρήστης</strong>,
 στο παράρτημα που θέλετε (π.χ. «0 — Έδρα»).</li>

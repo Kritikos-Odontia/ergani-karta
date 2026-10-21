@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
+import { ensureStores } from '../src/desktop/main.js';
 import { BACKUPS, KEEP, backupAndRecord, backupDue, backupNow } from '../src/desktop/backup.js';
 import { hashPassword } from '../src/desktop/owner/auth.js';
 import { desktopPaths } from '../src/desktop/paths.js';
@@ -74,6 +75,18 @@ describe('the backup', () => {
     expect(kept[0]).toBe('karta-20261023T220000');
   });
 
+  it('a backup that fails half-way leaves nothing behind, and never pushes a whole one out of the 30 kept', () => {
+    const paths = installation();
+    const stick = scratch('usb-');
+    for (let day = 0; day < KEEP; day += 1) backupNow(paths, stick, AT + day * 86_400_000);
+    writeFileSync(paths.recordsDb, 'not a database'); // the copy of the second store fails
+    for (let day = KEEP; day < KEEP + 3; day += 1) expect(() => backupNow(paths, stick, AT + day * 86_400_000)).toThrow();
+    const left = readdirSync(join(stick, BACKUPS)).sort();
+    expect(left).toHaveLength(KEEP);
+    expect(left.every((name) => /^karta-\d{8}T\d{6}$/.test(name))).toBe(true);
+    expect(readdirSync(join(stick, BACKUPS, left[0]!)).sort()).toEqual(['exports', 'records.sqlite', 'stamp.sqlite']);
+  });
+
   it('is due when a folder is chosen and the last good backup is a day old — or the last one failed', () => {
     expect(backupDue({}, AT)).toBe(false);
     expect(backupDue({ backupFolder: '/x' }, AT)).toBe(true);
@@ -94,5 +107,12 @@ describe('the backup', () => {
     writeDesktopState(paths.desktop, { ...readDesktopState(paths.desktop)!, backupFolder: stick });
     expect(backupAndRecord(paths, AT + 60_000, (l) => lines.push(l)).ok).toBe(true);
     expect(readDesktopState(paths.desktop)?.lastBackup).toEqual({ atIso: new Date(AT + 60_000).toISOString(), ok: true });
+  });
+});
+
+describe('the stores, once made', () => {
+  it('⛔ a store missing after the first start is a lost record: refused, never made again empty', () => {
+    const paths = desktopPaths(scratch('lost-'));
+    expect(() => ensureStores(paths, {}, new Date(AT).toISOString(), true)).toThrow(/λείπει το αρχείο .*stamp\.sqlite.*αντίγραφο/);
   });
 });

@@ -24,11 +24,18 @@ import type { DesktopPaths } from '../desktop/paths.js';
  * snapshot back (`to` filed nothing, so nothing is lost) and runs `from` again.
  */
 export const RESTART = 75;
+/**
+ * The program could not take the owner's port: another copy of it, or another program, holds it. Nothing was opened
+ * yet, so it is not the version's fault — the launcher counts it as no failed start and undoes no switch for it.
+ */
+export const PORT_TAKEN = 76;
 export const PROBATION_MS = 2 * 60_000;
 
 const Version = z.string().regex(/^\d{1,4}\.\d{1,4}\.\d{1,4}$/);
-export const VersionFile = z.object({ version: Version, node: Version }).strict();
-export const Pending = z.object({ from: Version, to: Version, snapshot: z.string().optional(), atIso: z.string() }).strict();
+// `version.json` and `pending.json` are read by the launcher, which never updates: a field a later version adds is
+// ignored (not refused), so a newer program can never make an older launcher fail. Their fields here stay as they are.
+export const VersionFile = z.object({ version: Version, node: Version });
+export const Pending = z.object({ from: Version, to: Version, snapshot: z.string().optional(), atIso: z.string() });
 export type Pending = z.infer<typeof Pending>;
 export const Rollback = z.object({ failed: Version, back: Version, atIso: z.string(), why: z.string() }).strict();
 export type Rollback = z.infer<typeof Rollback>;
@@ -121,6 +128,7 @@ export function snapshotStores(paths: DesktopPaths, into: string): void {
     if (!existsSync(store)) continue;
     const db = new DatabaseSync(store, { readOnly: true });
     try {
+      db.exec('PRAGMA busy_timeout = 5000');
       db.prepare('VACUUM INTO ?').run(join(into, name));
     } finally {
       db.close();

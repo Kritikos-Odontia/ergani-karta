@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: EUPL-1.2
-import { cpSync, existsSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { cpSync, existsSync, readdirSync, renameSync, rmSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -28,26 +28,38 @@ export function backupNow(paths: DesktopPaths, chosen: string, nowMs: number): s
     throw new Error('ο φάκελος των αντιγράφων δεν βρέθηκε — είναι συνδεδεμένο το USB;');
   }
   assertOutsideCodeFolders(chosen, 'ο φάκελος των αντιγράφων');
+  // Written as `<name>.partial`, renamed to its own name only when whole: a backup that failed half-way (the stick
+  // pulled out, the disk full) is removed, and never counts among the ones kept.
   const target = newRequestFolder(join(chosen, BACKUPS), 'karta', nowMs);
-  for (const [store, name] of [
-    [paths.stampDb, 'stamp.sqlite'],
-    [paths.recordsDb, 'records.sqlite'],
-  ] as const) {
-    if (!existsSync(store)) continue;
-    const db = new DatabaseSync(store, { readOnly: true });
-    try {
-      db.prepare('VACUUM INTO ?').run(join(target, name));
-    } finally {
-      db.close();
+  const partial = `${target}.partial`;
+  renameSync(target, partial);
+  try {
+    for (const [store, name] of [
+      [paths.stampDb, 'stamp.sqlite'],
+      [paths.recordsDb, 'records.sqlite'],
+    ] as const) {
+      if (!existsSync(store)) continue;
+      const db = new DatabaseSync(store, { readOnly: true });
+      try {
+        db.exec('PRAGMA busy_timeout = 5000');
+        db.prepare('VACUUM INTO ?').run(join(partial, name));
+      } finally {
+        db.close();
+      }
     }
+    if (existsSync(paths.exports)) cpSync(paths.exports, join(partial, 'exports'), { recursive: true });
+    renameSync(partial, target);
+  } catch (error) {
+    rmSync(partial, { recursive: true, force: true });
+    throw error;
   }
-  if (existsSync(paths.exports)) cpSync(paths.exports, join(target, 'exports'), { recursive: true });
   prune(join(chosen, BACKUPS));
   return target;
 }
 
-/** Keep the newest `KEEP` backups (by their names, which sort by time); remove the rest. */
+/** Keep the newest `KEEP` whole backups (by their names, which sort by time); remove the rest, and stale partials. */
 function prune(folder: string): void {
+  for (const stale of readdirSync(folder).filter((name) => /^karta-\d{8}T\d{6}\.partial$/.test(name))) rmSync(join(folder, stale), { recursive: true, force: true });
   const backups = readdirSync(folder).filter((name) => /^karta-\d{8}T\d{6}$/.test(name)).sort();
   for (const old of backups.slice(0, Math.max(0, backups.length - KEEP))) rmSync(join(folder, old), { recursive: true, force: true });
 }

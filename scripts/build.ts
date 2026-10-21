@@ -3,7 +3,7 @@ import { copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'no
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { build, type Plugin } from 'esbuild';
-import { makerMark, recordMigrationFiles, stampMigrationFiles } from '../src/assets.js';
+import { erganiUserForm, makerMark, recordMigrationFiles, stampMigrationFiles } from '../src/assets.js';
 import { VERSION } from '../src/version.js';
 
 /**
@@ -27,6 +27,7 @@ const assets = [
   `export const recordMigrationFiles = () => ${JSON.stringify(recordMigrationFiles())};`,
   `export const stampMigrationFiles = () => ${JSON.stringify(stampMigrationFiles())};`,
   `export const makerMark = () => ${JSON.stringify(makerMark())};`,
+  `export const erganiUserForm = () => ${JSON.stringify(erganiUserForm())};`,
 ].join('\n');
 const inlineAssets: Plugin = {
   name: 'inline-assets',

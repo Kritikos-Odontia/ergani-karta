@@ -37,6 +37,11 @@ having a problem. So pushes go only to a server the employer controls, with logi
 and never carry an ΑΦΜ (`withoutAfm`). The reception screen never shows an ΑΦΜ either: a ministry sentence that quotes
 one is shown with the nine digits blanked; the record keeps it verbatim.
 
+**The easy mode is the exception, by construction.** For a practice without its own ntfy server, pushes may go to the
+public ntfy.sh — but then they carry no name at all: the easy sender never reads the alarm's text, it sends one of a
+fixed set of sentences chosen by the alarm's kind («…δείτε τη σελίδα στο ιατρείο») under a fixed title, to a long random
+topic the owner can replace. A push that names a person is refused for ntfy.sh in the settings and again when it sends.
+
 ## The desk says when the owner's phone is not getting the alarms
 
 While an alarm is owed a push and its latest push failed (the push server down, its login lost), the reception page

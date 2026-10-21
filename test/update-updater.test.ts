@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 import { generateKeyPairSync, sign } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer, type IncomingHttpHeaders, type Server } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -102,7 +102,7 @@ function setUp(): DesktopPaths {
   return paths;
 }
 
-function updater(paths: DesktopPaths, fake: Fake, more: { quiet?: (t: number, since: number) => boolean; now?: () => number; env?: NodeJS.ProcessEnv } = {}) {
+function updater(paths: DesktopPaths, fake: Fake, more: { quiet?: (t: number, since: number) => boolean; now?: () => number; env?: NodeJS.ProcessEnv; stopFails?: boolean; version?: string } = {}) {
   const happened: string[] = [];
   const u = new Updater({
     paths,
@@ -112,11 +112,12 @@ function updater(paths: DesktopPaths, fake: Fake, more: { quiet?: (t: number, si
     quiet: more.quiet ?? (() => true),
     stopServices: async () => {
       happened.push(`stopped (snapshot there: ${existsSync(join(paths.versions, '0.2.0', '.snapshot'))})`);
+      if (more.stopFails) throw new Error('the stop failed half-way');
     },
     exit: (code) => happened.push(`exit ${code}`),
     api: fake.api,
     keys: TEST_KEYS,
-    version: '0.1.0',
+    version: more.version ?? '0.1.0',
   });
   return { u, happened };
 }
@@ -187,6 +188,17 @@ describe('the daily check', () => {
     expect(found.problem).toMatch(/υπογραφή/);
   });
 
+  it('a release whose signed list is not up yet (its workflow still building): nothing new yet, not a failed check', async () => {
+    const fake = await fakeGithub();
+    const paths = setUp();
+    const r = release('0.2.0');
+    r.files.delete('SHA256SUMS.sig');
+    r.files.delete('SHA256SUMS');
+    fake.serve(r);
+    expect(await updater(paths, fake).u.check()).toMatchObject({ ok: true });
+    expect(readDesktopState(paths.desktop)?.update?.available).toBeUndefined();
+  });
+
   it('no release, or an older one: up to date; a login only when one is given', async () => {
     const fake = await fakeGithub();
     const paths = setUp();
@@ -214,6 +226,18 @@ describe('installing', () => {
     expect(existsSync(join(dir, '.snapshot', 'complete'))).toBe(true);
     expect(readFileSync(join(paths.versions, 'current'), 'utf8').trim()).toBe('0.2.0');
     expect(JSON.parse(readFileSync(join(paths.versions, 'pending.json'), 'utf8'))).toMatchObject({ from: '0.1.0', to: '0.2.0' });
+  });
+
+  it('a stop that fails half-way still ends with RESTART — on this version, nothing pending — so nothing stays dark', async () => {
+    const fake = await fakeGithub();
+    const paths = setUp();
+    writeFileSync(join(paths.versions, 'current'), '0.1.0\n');
+    fake.serve(release('0.2.0'));
+    const { u, happened } = updater(paths, fake, { stopFails: true });
+    await u.install();
+    expect(happened).toEqual(['stopped (snapshot there: false)', `exit ${RESTART}`]);
+    expect(readFileSync(join(paths.versions, 'current'), 'utf8').trim()).toBe('0.1.0');
+    expect(existsSync(join(paths.versions, 'pending.json'))).toBe(false);
   });
 
   it('the same Node.js is copied, not downloaded', async () => {
@@ -252,12 +276,70 @@ describe('installing', () => {
     expect(happened).toEqual([]);
   });
 
-  it('a card on its way to ΕΡΓΑΝΗ: not now', async () => {
+  it('a small file that is not small: abandoned as it streams, whatever size the release claims', async () => {
+    let written = 0;
+    const server = createServer((req, res) => {
+      const api = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+      if (req.url === `/repos/${REPOSITORY}/releases/latest`) {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        return void res.end(JSON.stringify({ assets: ['SHA256SUMS', 'SHA256SUMS.sig', 'manifest.json'].map((name, i) => ({ name, url: `${api}/repos/${REPOSITORY}/releases/assets/${i}`, size: 100 })) }));
+      }
+      res.writeHead(200, { 'content-type': 'application/octet-stream' });
+      const chunk = Buffer.alloc(256 * 1024);
+      const more = () => {
+        while (written < 64 * 1024 * 1024) {
+          written += chunk.length;
+          if (!res.write(chunk)) return void res.once('drain', more);
+        }
+        res.end();
+      };
+      res.on('error', () => {});
+      more();
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    cleanup.push(() => new Promise<void>((resolve) => { server.closeAllConnections(); server.close(() => resolve()); }));
+    const paths = setUp();
+    const u = new Updater({ paths, env: {}, now: Date.now, log: () => {}, quiet: () => true, stopServices: async () => {}, exit: () => {}, api: `http://127.0.0.1:${(server.address() as { port: number }).port}`, keys: TEST_KEYS, version: '0.1.0' });
+    const found = await u.check();
+    expect(found.problem).toMatch(/πολύ μεγάλη/);
+    expect(written).toBeLessThan(32 * 1024 * 1024);
+  });
+
+  it('at night, a download that ends after 05:00 — or after someone stamped — is not switched to', async () => {
     const fake = await fakeGithub();
     const paths = setUp();
     fake.serve(release('0.2.0'));
+    const night = Date.parse('2026-12-01T02:59:00Z'); // 04:59 Athens
+    // The clock reads 05:01 once the app's file (the release's first) has been downloaded.
+    const downloaded = () => fake.seen.some((s) => /assets\/0$/.test(s.url));
+    const { u, happened } = updater(paths, fake, { now: () => (downloaded() ? night + 2 * 60_000 : night) });
+    const result = await u.install('night');
+    expect(result?.problem).toMatch(/νύχτα/);
+    expect(happened).toEqual([]);
+  });
+
+  it('a card on its way to ΕΡΓΑΝΗ: not now — and the page says why, as for every press that installs nothing', async () => {
+    const fake = await fakeGithub();
+    const paths = setUp();
+    fake.serve(release('0.2.0'));
+    writeDesktopState(paths.desktop, { ownerPassword: 'scrypt$test', nightUpdates: true, update: { checkedIso: new Date().toISOString(), ok: true, available: '0.2.0' } });
     const { u, happened } = updater(paths, fake, { quiet: () => false });
     expect((await u.install())?.problem).toMatch(/καθ’ οδόν/);
+    expect(happened).toEqual([]);
+    expect(u.record()?.installProblem?.problem).toMatch(/καθ’ οδόν/);
+  });
+
+  it('after the switch, the version now running is not «available»: no button, no night install, not one request', async () => {
+    const fake = await fakeGithub();
+    const paths = setUp();
+    fake.serve(release('0.2.0'));
+    const night = Date.parse('2026-12-01T01:00:00Z'); // 03:00 Athens
+    // The note 0.1.0's last check left: «0.2.0 available», an hour ago.
+    writeDesktopState(paths.desktop, { ownerPassword: 'scrypt$test', nightUpdates: true, update: { checkedIso: new Date(night - 3_600_000).toISOString(), ok: true, available: '0.2.0' } });
+    const { u, happened } = updater(paths, fake, { now: () => night, version: '0.2.0' });
+    expect(u.available()).toBeUndefined();
+    await u.tick();
+    expect(fake.seen).toEqual([]);
     expect(happened).toEqual([]);
   });
 });
