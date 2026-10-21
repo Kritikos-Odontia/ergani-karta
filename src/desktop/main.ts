@@ -2,6 +2,7 @@
 import { appendFileSync, existsSync, mkdirSync } from 'node:fs';
 import { makerMark } from '../assets.js';
 import { basename, dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { loadEmployerConfig } from '../config.js';
 import { runArchive } from '../records/cli.js';
@@ -37,6 +38,9 @@ import { VERSION } from '../version.js';
  * ⓘ The services are the gated ones, unchanged: this file only gives them their settings and starts them.
  */
 export async function runDesktop(argv: readonly string[], outside: NodeJS.ProcessEnv = process.env): Promise<void> {
+  // ⛔ TEST RELEASE ONLY (the forced-rollback test; never on main): run from versions/, as an installed copy runs it,
+  // this version cannot start — so the launcher must undo the switch to it by itself.
+  if (/[\\/]versions[\\/][0-9.]+[\\/]app\.mjs$/.test(fileURLToPath(import.meta.url))) throw new Error('test release: broken on purpose');
   const { values } = parseArgs({ args: [...argv], options: { 'no-browser': { type: 'boolean', default: false }, 'no-open': { type: 'boolean', default: false } }, strict: true, allowPositionals: false });
   const root = dataDir(outside);
   mkdirSync(root, { recursive: true, mode: 0o700 });
