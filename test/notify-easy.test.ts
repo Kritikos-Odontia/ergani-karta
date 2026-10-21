@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: EUPL-1.2
 import { readFileSync } from 'node:fs';
-import { describe, expect, it } from 'vitest';
+import { createServer } from 'node:http';
+import { afterEach, describe, expect, it } from 'vitest';
 import { Secret } from '../src/config.js';
 import { loadStampSettings } from '../src/stamp/config.js';
+import { adminCommand } from '../src/stamp/admin.js';
 import { EASY_TITLE, EASY_TOPIC, NAMELESS, namelessSender, namelessText, newEasyTopic, ntfySender } from '../src/stamp/notify.js';
 import { AFM } from './fixtures/people.js';
 
@@ -51,6 +53,61 @@ describe('the easy mode — nameless, through ntfy.sh', () => {
     expect(newEasyTopic()).toMatch(EASY_TOPIC);
     expect(newEasyTopic()).not.toBe(newEasyTopic());
     expect(() => namelessSender('ergani')).toThrow();
+  });
+});
+
+let cleanup: Array<() => Promise<void> | void> = [];
+afterEach(async () => {
+  for (const f of cleanup.reverse()) await f();
+  cleanup = [];
+});
+
+/** Two loopback servers: the first answers every push with a redirect to the second, which notes what reaches it. */
+async function redirecting(status: number): Promise<{ first: string; reached: string[] }> {
+  const reached: string[] = [];
+  const second = createServer((req, res) => {
+    let body = '';
+    req.on('data', (d) => (body += String(d)));
+    req.on('end', () => {
+      reached.push(body);
+      res.end();
+    });
+  });
+  await new Promise<void>((resolve) => second.listen(0, '127.0.0.1', resolve));
+  const to = `http://127.0.0.1:${(second.address() as { port: number }).port}/`;
+  const first = createServer((_req, res) => res.writeHead(status, { location: to }).end());
+  await new Promise<void>((resolve) => first.listen(0, '127.0.0.1', resolve));
+  cleanup.push(() => new Promise<void>((resolve) => first.close(() => resolve())));
+  cleanup.push(() => new Promise<void>((resolve) => second.close(() => resolve())));
+  return { first: `http://127.0.0.1:${(first.address() as { port: number }).port}`, reached };
+}
+
+describe('⛔ no push follows a redirect', () => {
+  it('a push with names: the own server answering 307 or 308 (to ntfy.sh, say) — refused, sent nowhere else', async () => {
+    for (const status of [307, 308]) {
+      const { first, reached } = await redirecting(status);
+      await expect(ntfySender(new Secret(`${first}/alerts`), new Secret('tk_fixture'))(NAMED)).rejects.toThrow(/redirect/);
+      expect(reached).toEqual([]);
+    }
+  });
+
+  it('a nameless push: its topic goes to ntfy.sh and nowhere else', async () => {
+    const { first, reached } = await redirecting(307);
+    const toFirst = ((_url: string | URL, init?: RequestInit) => fetch(`${first}/`, init)) as typeof fetch;
+    await expect(namelessSender(newEasyTopic(), toFirst)(NAMED, 'queue:1')).rejects.toThrow(/redirect/);
+    expect(reached).toEqual([]);
+  });
+});
+
+describe('the easy topic for Docker', () => {
+  it('`ergani admin easy-topic` makes a new random one — no settings needed, never typed by hand', async () => {
+    const said: string[] = [];
+    const io = { now: Date.now, out: (line: string) => void said.push(line) };
+    expect(await adminCommand(['easy-topic'], {}, io)).toBe(0);
+    expect(await adminCommand(['easy-topic'], {}, io)).toBe(0);
+    const topics = said.filter((line) => EASY_TOPIC.test(line));
+    expect(topics).toHaveLength(2);
+    expect(topics[0]).not.toBe(topics[1]);
   });
 });
 

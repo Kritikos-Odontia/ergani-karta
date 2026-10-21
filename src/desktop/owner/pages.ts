@@ -371,7 +371,8 @@ ${available === undefined ? html`` : html`<form method="post" action="/updates">
       switch (form.get('do')) {
         case 'on':
         case 'new':
-          writeDesktopState(c.paths.desktop, { ...state, alerts: { topic: newEasyTopic() } });
+          // «Άνοιγμα» keeps a topic already there (an old tab, a form sent twice): only «Νέο θέμα» cuts the phones off.
+          if (form.get('do') === 'new' || state.alerts === undefined) writeDesktopState(c.paths.desktop, { ...state, alerts: { topic: newEasyTopic() } });
           message = note('ok', form.get('do') === 'new' ? 'Νέο θέμα: σκανάρετε ξανά το QR σε κάθε κινητό· το παλιό δεν λαμβάνει πια τίποτα.' : 'Οι ειδοποιήσεις άνοιξαν. Σκανάρετε το QR με το κινητό σας.');
           break;
         case 'off': {

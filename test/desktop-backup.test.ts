@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: EUPL-1.2
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
-import { ensureStores } from '../src/desktop/main.js';
+import { StoreMissing, ensureStores, restoreSteps } from '../src/desktop/main.js';
 import { BACKUPS, KEEP, backupAndRecord, backupDue, backupNow } from '../src/desktop/backup.js';
 import { hashPassword } from '../src/desktop/owner/auth.js';
 import { desktopPaths } from '../src/desktop/paths.js';
@@ -110,9 +110,39 @@ describe('the backup', () => {
   });
 });
 
+describe('desktop.json', () => {
+  it('a field a later version wrote is kept when this version rewrites the file (after a rollback, say)', () => {
+    const paths = desktopPaths(scratch('state-'));
+    mkdirSync(paths.root, { recursive: true });
+    writeFileSync(paths.desktop, JSON.stringify({ ownerPassword: 'scrypt$test', nightUpdates: true, later: { kept: true } }));
+    writeDesktopState(paths.desktop, { ...readDesktopState(paths.desktop)!, backupFolder: '/somewhere' });
+    expect(JSON.parse(readFileSync(paths.desktop, 'utf8'))).toMatchObject({ later: { kept: true }, backupFolder: '/somewhere' });
+  });
+});
+
 describe('the stores, once made', () => {
   it('⛔ a store missing after the first start is a lost record: refused, never made again empty', () => {
     const paths = desktopPaths(scratch('lost-'));
     expect(() => ensureStores(paths, {}, new Date(AT).toISOString(), true)).toThrow(/λείπει το αρχείο .*stamp\.sqlite.*αντίγραφο/);
+  });
+
+  it('…and the page it shows says how to restore it: which file, from which backup folder, into which folder, then a restart', () => {
+    const paths = desktopPaths(scratch('lost-'));
+    mkdirSync(paths.root, { recursive: true });
+    const stick = scratch('usb-');
+    writeDesktopState(paths.desktop, { ownerPassword: 'scrypt$test', nightUpdates: true, backupFolder: stick });
+    let thrown: unknown;
+    try {
+      ensureStores(paths, {}, new Date(AT).toISOString(), true);
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(StoreMissing);
+    const steps = String(restoreSteps(paths, (thrown as StoreMissing).missing));
+    expect(steps).toContain(join(stick, BACKUPS));
+    expect(steps).toContain(`<code>stamp.sqlite</code> στον φάκελο <code>${dirname(paths.stampDb)}</code>`);
+    expect(steps).toContain(`<code>records.sqlite</code> στον φάκελο <code>${dirname(paths.recordsDb)}</code>`);
+    expect(steps).toContain('επανεκκινήστε τον υπολογιστή');
+    expect(steps).not.toContain('«Αντίγραφα»'); // a page that is not served in this state
   });
 });

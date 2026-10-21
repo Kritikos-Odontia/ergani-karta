@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 import { appendFileSync, existsSync, mkdirSync } from 'node:fs';
 import { makerMark } from '../assets.js';
-import { dirname } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { loadEmployerConfig } from '../config.js';
 import { runArchive } from '../records/cli.js';
@@ -9,9 +9,9 @@ import { claimRecordStore, openRecordStore } from '../records/store.js';
 import { loadStampSettings } from '../stamp/config.js';
 import { runStampService } from '../stamp/main.js';
 import { initStampStore } from '../stamp/store.js';
-import { backupAndRecord, backupDue } from './backup.js';
+import { BACKUPS, backupAndRecord, backupDue } from './backup.js';
 import { GUIDE_PAGE } from './owner/guide.js';
-import { note, page } from './owner/html.js';
+import { html, note, page, type Html } from './owner/html.js';
 import { ownerPages } from './owner/pages.js';
 import { openInBrowser } from './open.js';
 import { createOwnerServer, type OwnerPage } from './owner/server.js';
@@ -74,10 +74,13 @@ export async function runDesktop(argv: readonly string[], outside: NodeJS.Proces
     const state = readDesktopState(paths.desktop);
     ensureStores(paths, env, nowIso, state?.storesSince !== undefined);
     if (state !== undefined && state.storesSince === undefined) writeDesktopState(paths.desktop, { ...state, storesSince: nowIso });
-    // The easy phone alerts, as the owner's «Ειδοποιήσεις» page sets them now (nameless: stamp/notify.ts).
+    // The easy phone alerts, as the owner's «Ειδοποιήσεις» page sets them now (nameless: stamp/notify.ts). Against the
+    // local stand-in for ΕΡΓΑΝΗ (the tests' hatch) the alarms never leave the computer; the page's ΔΟΚΙΜΗ still does.
+    const standIn = loadEmployerConfig(env).erganiRealm === 'local';
     const pushes: PushSender = async (push, key) => {
       const topic = readDesktopState(paths.desktop)?.alerts?.topic;
-      if (topic !== undefined) await namelessSender(topic)(push, key);
+      if (topic === undefined || standIn) return 'off';
+      await namelessSender(topic)(push, key);
     };
     stamping = await runStampService(env, { onSignals: false, beforeStart: passProbation, pushes, log: (line) => log(`stamp: ${line}`) });
     // The daily run loops for as long as the program runs; a failure of one run is its own (records/cli.ts).
@@ -154,7 +157,7 @@ export async function runDesktop(argv: readonly string[], outside: NodeJS.Proces
       // The owner pages stay up and say so, instead of «starting» for ever.
       const failed = () => ({
         status: 503,
-        body: page('Δεν ξεκίνησε', note('bad', `Το πρόγραμμα δεν ξεκίνησε: ${why}`), { nav: false }),
+        body: page('Δεν ξεκίνησε', error instanceof StoreMissing ? restoreSteps(paths, error.missing) : note('bad', `Το πρόγραμμα δεν ξεκίνησε: ${why}`), { nav: false }),
       });
       pages = new Map([['/', failed]]);
     }
@@ -182,6 +185,30 @@ export function quietForUpdate(paths: DesktopPaths, nowMs: number, sinceMs: numb
   }
 }
 
+/** A store the program made is gone: the employer's record is lost until it is restored from a backup. */
+export class StoreMissing extends Error {
+  constructor(readonly missing: readonly string[]) {
+    super(`λείπει το αρχείο ${missing.join(', ')} — επαναφέρετέ το από το τελευταίο αντίγραφο ασφαλείας`);
+  }
+}
+
+/**
+ * The restore, on the page the owner sees when a store is missing — the only page served then (the owner's pages need
+ * the stores): which file, from which backup folder, into which folder, and the restart that starts the program again.
+ */
+export function restoreSteps(paths: DesktopPaths, missing: readonly string[]): Html {
+  const folder = readDesktopState(paths.desktop)?.backupFolder;
+  const copies = missing.map((store) => html`<li>αντιγράψτε το <code>${basename(store)}</code> στον φάκελο <code>${dirname(store)}</code>·</li>`);
+  return html`${note('bad', html`Λείπει ${missing.length > 1 ? 'τα αρχεία' : 'το αρχείο'} του εργοδότη: ${missing.map((store) => html`<code>${store}</code> `)}. Το πρόγραμμα δεν ξεκινά με άδειο αρχείο, για να μη χαθεί η καταγραφή χωρίς να το δείτε.`)}
+<h2>Επαναφορά από αντίγραφο ασφαλείας</h2>
+<ol>
+<li>${folder === undefined ? html`Δεν είχε οριστεί φάκελος αντιγράφων. Αν έχετε κρατήσει αντίγραφο αλλού, ανοίξτε το.` : html`Ανοίξτε τον φάκελο <code>${join(folder, BACKUPS)}</code> (συνδέστε πρώτα το USB, αν είναι εκεί) και μέσα του το νεότερο <code>karta-…</code>.`}</li>
+${copies}
+<li>επανεκκινήστε τον υπολογιστή: το πρόγραμμα ξεκινά μόνο του με το αρχείο που επαναφέρατε.</li>
+</ol>
+<p class="hint">Ό,τι χτυπήθηκε μετά το αντίγραφο λείπει από αυτό· το μηνιαίο αντίγραφο της ΕΡΓΑΝΗ ξαναδιαβάζεται μόνο του.</p>`;
+}
+
 /**
  * Make the stores on the first start after setup; never touch one that exists. ⛔ Once made (`established`), a missing
  * store is the employer's record lost — the program refuses to start and says to restore it from a backup, instead of
@@ -190,9 +217,7 @@ export function quietForUpdate(paths: DesktopPaths, nowMs: number, sinceMs: numb
 export function ensureStores(paths: DesktopPaths, env: NodeJS.ProcessEnv, nowIso: string, established: boolean): void {
   if (established) {
     const missing = [paths.stampDb, paths.recordsDb].filter((store) => !existsSync(store));
-    if (missing.length > 0) {
-      throw new Error(`λείπει το αρχείο ${missing.join(', ')} — κλείστε το πρόγραμμα και επαναφέρετέ το από το τελευταίο αντίγραφο ασφαλείας (σελίδα «Αντίγραφα»)`);
-    }
+    if (missing.length > 0) throw new StoreMissing(missing);
     return;
   }
   const ergani = loadEmployerConfig(env);

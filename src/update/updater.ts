@@ -272,6 +272,12 @@ export class Updater {
       snapshotStores(this.#o.paths, snapshot);
       writePending(versions, { from: this.#version, to, snapshot, atIso: new Date(this.#o.now()).toISOString() });
       writeMark(versions, 'current', to);
+      // An earlier attempt that did not happen is history now: it must not show again beside the next version.
+      const state = readDesktopState(this.#o.paths.desktop);
+      if (state?.update?.installProblem !== undefined) {
+        const { installProblem: _past, ...update } = state.update;
+        writeDesktopState(this.#o.paths.desktop, { ...state, update });
+      }
     } catch (error) {
       this.#o.log(`update: the switch failed before it happened — ${message(error)}; starting ${this.#version} again`);
       rmSync(join(versions, 'pending.json'), { force: true });

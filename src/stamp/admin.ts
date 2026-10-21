@@ -13,7 +13,7 @@ import { branchHeading, loadStampSettings } from './config.js';
 import { allDevices, createEnrollment, revokeDevice } from './devices.js';
 import { historyCsv, historyHtml, historyOf } from './history.js';
 import { cardsMissingProof, decide, openPunches, stateOfPunch } from './outbox.js';
-import { ntfySender, type PushSender } from './notify.js';
+import { namelessSender, newEasyTopic, ntfySender, type PushSender } from './notify.js';
 import { declaredDays, markQuietDay, readScheduleNow } from './schedule.js';
 import {
   addPerson,
@@ -52,7 +52,9 @@ import { addBranch, initStampStore, isoOf, openStampStore, storeBranches, type I
  *   decide --card N (--reason 001|002|003 | --covered)   the owner's decision on a queued card
  *   quiet --date YYYY-MM-DD --reason «28η Οκτωβρίου»      a closed day: no «has not stamped in» alarm
  *   unquiet --date YYYY-MM-DD --reason «ανοίξαμε τελικά»   withdraw that mark (both are kept)
- *   push-test              one test push to the owner's phone — proves the topic, the login and the phone
+ *   push-test              one test push to the owner's phone — proves the topic, the login and the phone (in the
+ *                          easy mode, the fixed ΔΟΚΙΜΗ sentence)
+ *   easy-topic             a new random topic for the easy mode (NTFY_EASY_TOPIC) — never type one by hand
  *   check [--branch N]     READ ONLY, for every branch (or one): sign in with its login, confirm WRKCardSE is offered
  *                          to it, read today's stand-in schedule and compare its people with the list — before the
  *                          first real filing
@@ -97,6 +99,12 @@ export async function adminCommand(argv: readonly string[], env: NodeJS.ProcessE
     strict: true,
     allowPositionals: false,
   });
+  if (command === 'easy-topic') {
+    // Needs no settings: it is what goes INTO them.
+    io.out(newEasyTopic());
+    io.out('Βάλτε το στο αρχείο ρυθμίσεων ως NTFY_EASY_TOPIC=… και κρατήστε το για τον εαυτό σας: όποιος το ξέρει βλέπει τις ειδοποιήσεις.');
+    return 0;
+  }
   const settings = loadStampSettings(env);
   const ergani = loadEmployerConfig(env);
   const codes = ergani.branches.map((b) => b.branchCode);
@@ -257,13 +265,19 @@ export async function adminCommand(argv: readonly string[], env: NodeJS.ProcessE
         );
         return 0;
       case 'push-test': {
-        const send = io.send ?? (settings.ntfy === undefined ? undefined : ntfySender(settings.ntfy.url, settings.ntfy.token));
-        if (send === undefined) throw new Error('no phone push is configured (NTFY_URL and NTFY_TOKEN)');
+        const send =
+          io.send ??
+          (settings.ntfy !== undefined
+            ? ntfySender(settings.ntfy.url, settings.ntfy.token)
+            : settings.easyTopic !== undefined
+              ? namelessSender(settings.easyTopic)
+              : undefined);
+        if (send === undefined) throw new Error('no phone push is configured (NTFY_URL and NTFY_TOKEN, or NTFY_EASY_TOPIC)');
         await send({
           title: `ΕΡΓΑΝΗ — ${settings.label}`,
           message: 'Δοκιμή ειδοποίησης από την κάρτα εργασίας. Αν τη βλέπετε στο κινητό, οι ειδοποιήσεις λειτουργούν.',
           priority: 4,
-        });
+        }, 'test'); // the easy mode sends its own fixed ΔΟΚΙΜΗ sentence for this key
         out('Sent. ⚠ «Sent» proves only that the server took it — the pass is the owner seeing it on the phone.');
         return 0;
       }

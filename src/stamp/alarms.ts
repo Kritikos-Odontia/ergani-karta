@@ -505,7 +505,7 @@ export class Alarms {
     for (const line of lines) {
       if (line.push === undefined || !this.#due(line.key, t)) continue;
       try {
-        await send(line.push, line.key);
+        if ((await send(line.push, line.key)) === 'off') continue; // nothing sent, nothing recorded: asked again next pass
         db.prepare("INSERT INTO pushes (key, at_ms, outcome) VALUES (?, ?, 'sent')").run(line.key, now());
         this.#log(`alarms: pushed ${line.key.split(':')[0]}`);
       } catch (error) {

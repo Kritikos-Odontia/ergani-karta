@@ -24,7 +24,11 @@ export interface Push {
 }
 
 /** `key` is the alarm's own key (alarms.ts): its first part says what kind of alarm it is. */
-export type PushSender = (push: Push, key?: string) => Promise<void>;
+/**
+ * Sends one push; throws when it did not get through. `'off'`: the channel is switched off right now (the desktop
+ * program's «Ειδοποιήσεις» page) — nothing sent and nothing to record, so an alarm still holding goes out once it is on.
+ */
+export type PushSender = (push: Push, key?: string) => Promise<void | 'off'>;
 
 // ── THE EASY MODE: nameless pushes through the free public ntfy.sh (his «Yes», 21/10) ─────────────────────────────
 // A practice without its own ntfy server can still be told «look at the page». ⛔ This sender CANNOT carry a name: it
@@ -72,11 +76,13 @@ export function namelessSender(topic: string, transport: typeof fetch = globalTh
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ topic, title: EASY_TITLE, message: namelessText(key), priority: push.priority }),
         signal: AbortSignal.timeout(10_000),
+        redirect: 'manual', // the topic goes to ntfy.sh and nowhere else
       });
     } catch (error) {
       throw new Error(`ntfy.sh did not answer (${error instanceof Error ? error.name : 'error'})`);
     }
     await res.body?.cancel();
+    if (res.status >= 300 && res.status < 400) throw new Error(`ntfy.sh answered with a redirect (HTTP ${res.status}) — not followed`);
     if (!res.ok) throw new Error(`ntfy.sh answered HTTP ${res.status}`);
   };
 }
@@ -109,12 +115,15 @@ export function ntfySender(url: Secret, token: Secret, transport: typeof fetch =
           priority: push.priority,
         }),
         signal: AbortSignal.timeout(10_000),
+        // ⛔ Never followed: a redirect could take a push with names (and the token) to another server — ntfy.sh too.
+        redirect: 'manual',
       });
     } catch (error) {
       // ⛔ The cause may carry the address; only its kind is kept.
       throw new Error(`the push server did not answer (${error instanceof Error ? error.name : 'error'})`);
     }
     await res.body?.cancel();
+    if (res.status >= 300 && res.status < 400) throw new Error(`the push server answered with a redirect (HTTP ${res.status}) — not followed`);
     if (!res.ok) throw new Error(`the push server answered HTTP ${res.status}`);
   };
 }

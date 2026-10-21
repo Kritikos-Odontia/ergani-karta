@@ -240,6 +240,17 @@ describe('installing', () => {
     expect(existsSync(join(paths.versions, 'pending.json'))).toBe(false);
   });
 
+  it('once switched, an earlier attempt that did not happen is not shown again beside the next version', async () => {
+    const fake = await fakeGithub();
+    const paths = setUp();
+    fake.serve(release('0.2.0'));
+    writeDesktopState(paths.desktop, { ownerPassword: 'scrypt$test', nightUpdates: true, update: { checkedIso: new Date().toISOString(), ok: true, available: '0.2.0', installProblem: { atIso: new Date().toISOString(), problem: 'η νύχτα πέρασε' } } });
+    const { u, happened } = updater(paths, fake);
+    await u.install();
+    expect(happened).toContain(`exit ${RESTART}`);
+    expect(u.record()?.installProblem).toBeUndefined();
+  });
+
   it('the same Node.js is copied, not downloaded', async () => {
     const fake = await fakeGithub();
     const paths = setUp();

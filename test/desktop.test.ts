@@ -172,6 +172,11 @@ describe('ergani desktop — from an empty folder to a working page', () => {
     expect(topic).toBeDefined();
     expect(alertsPage).toContain('<svg xmlns="http://www.w3.org/2000/svg"');
     expect(JSON.parse(readFileSync(join(data, 'desktop.json'), 'utf8')).alerts.topic).toBe(topic);
+    // «Άνοιγμα» once more (an old tab, a form sent twice) keeps the topic: only «Νέο θέμα» cuts the phones off.
+    await post('/alerts', { do: 'on', csrf: csrf! }, { cookie });
+    expect(JSON.parse(readFileSync(join(data, 'desktop.json'), 'utf8')).alerts.topic).toBe(topic);
+    await post('/alerts', { do: 'new', csrf: csrf! }, { cookie });
+    expect(JSON.parse(readFileSync(join(data, 'desktop.json'), 'utf8')).alerts.topic).not.toBe(topic);
 
     // A backup to a chosen folder (a stick, the Dropbox folder) — written at once, and noted on the home page.
     const stick = mkdtempSync(join(tmpdir(), 'karta-stick-'));

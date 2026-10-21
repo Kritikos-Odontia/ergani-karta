@@ -81,13 +81,15 @@ async function setup(
   }
   const pushes: Push[] = [];
   let failing = false;
+  let off = false;
   const send = async (push: Push) => {
+    if (off) return 'off' as const;
     if (failing) throw new Error('the push server answered HTTP 502');
     pushes.push(push);
   };
   const alarms = new Alarms({ db, branches: ONE, readers: readersOf(client), send, now, title: 'ΕΡΓΑΝΗ — Δοκιμή', log: () => undefined });
   const outbox = outboxFor({ db, client, instance, now, log: () => undefined });
-  return { fake, db, client, device, pushes, alarms, outbox, instance, fail: (v: boolean) => (failing = v) };
+  return { fake, db, client, device, pushes, alarms, outbox, instance, fail: (v: boolean) => (failing = v), switchOff: (v: boolean) => (off = v) };
 }
 
 async function person(db: StampStore, who: typeof ALFA, pin = '2580'): Promise<VerifiedPerson> {
@@ -166,6 +168,22 @@ describe('someone forgot to stamp', () => {
     expect(lines.map((l) => l.desk?.text)).toEqual(['Άλφα — δεν έχει χτυπήσει κάρτα ΕΝΑΡΞΗΣ (βάρδια από 09:00).']);
     capturePunch(db, alfa, ENARXI, device, clock);
     expect(forgotAlarms(db, clock, 't', ONE)).toEqual([]);
+  });
+
+  it('phone alerts switched off: the alarm is neither sent nor failed (no amber line) — and reaches the phone once they are on', async () => {
+    const { db, client, alarms, pushes, switchOff } = await setup();
+    await person(db, ALFA);
+    await ensureSchedule(db, client, clock);
+    switchOff(true);
+    clock = at('09:20');
+    await alarms.tick();
+    expect(pushes).toEqual([]);
+    expect(db.prepare('SELECT count(*) AS n FROM pushes').get()?.['n']).toBe(0);
+    expect(alarms.deskWarnings(clock).map((w) => w.text).join(' ')).not.toMatch(/κινητό/);
+    switchOff(false);
+    clock = at('09:25');
+    await alarms.tick();
+    expect(pushes.map((p) => p.message)).toEqual([expect.stringContaining('Άλφα')]);
   });
 
   it('a closed day raises no «has not stamped in» — and a mistaken mark can be withdrawn', async () => {

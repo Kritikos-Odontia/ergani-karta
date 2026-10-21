@@ -132,7 +132,7 @@ export function loadStampSettings(env: NodeJS.ProcessEnv = process.env): StampSe
     throw new Error('NTFY_EASY_TOPIC (nameless pushes) and NTFY_URL (your own server) are one or the other.');
   }
   if (easyTopic !== undefined && !EASY_TOPIC.test(easyTopic)) {
-    throw new Error('NTFY_EASY_TOPIC must be karta- followed by 24 or more random letters and digits.');
+    throw new Error('NTFY_EASY_TOPIC must be karta- followed by 24 to 58 random letters, digits, - or _ (make one: ergani admin easy-topic).');
   }
 
   return {

@@ -121,6 +121,17 @@ jobs:
           & "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe" /nologo /target:winexe /optimize "/out:$stage\KartaErgasias.exe" packaging\windows\Starter.cs
           if ($LASTEXITCODE -ne 0) { exit 1 }
 
+      # Greek is among Inno Setup's user-contributed translations, which its installation does not carry: taken from
+      # Inno Setup's own source at the 6.7.1 release's commit, and checked byte for byte. Not kept in this repository
+      # (it names its translators); never committed (.gitignore).
+      - name: the installer's Greek screens — Inno Setup's own translation, pinned and checked
+        shell: pwsh
+        run: |
+          $isl = 'packaging\windows\Greek.isl'
+          Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/jrsoftware/issrc/cfdf48923178df4b4f040e038b423aa555a61ffc/Files/Languages/Unofficial/Greek.isl' -OutFile $isl
+          $sha = (Get-FileHash $isl -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($sha -ne '39c11b8056209edee6baf8f2e9c72ba5dede63e631391b1d73f7acdd56a899b4') { Write-Error "Greek.isl is not the pinned file ($sha)"; exit 1 }
+
       - name: the installer
         shell: pwsh
         env:

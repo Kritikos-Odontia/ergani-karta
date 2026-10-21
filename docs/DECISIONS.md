@@ -40,7 +40,10 @@ one is shown with the nine digits blanked; the record keeps it verbatim.
 **The easy mode is the exception, by construction.** For a practice without its own ntfy server, pushes may go to the
 public ntfy.sh — but then they carry no name at all: the easy sender never reads the alarm's text, it sends one of a
 fixed set of sentences chosen by the alarm's kind («…δείτε τη σελίδα στο ιατρείο») under a fixed title, to a long random
-topic the owner can replace. A push that names a person is refused for ntfy.sh in the settings and again when it sends.
+topic the owner can replace. A push that names a person is refused for ntfy.sh in the settings and again when it sends,
+and no push follows a redirect (a redirect could carry it elsewhere). What ntfy.sh still sees is when each push is sent
+and from which internet address — in a practice with one or two staff, an alarm's time can point to one person; said
+in docs/NOTIFICATIONS.md, with the own server as the way out.
 
 ## The desk says when the owner's phone is not getting the alarms
 

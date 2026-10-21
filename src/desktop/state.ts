@@ -32,7 +32,8 @@ export const DesktopState = z.object({
   alerts: z.object({ topic: z.string() }).optional(),
   /** When the two stores were first made. From then on a missing store is a lost record, never made again empty. */
   storesSince: z.string().optional(),
-});
+  // A field a later version adds is kept (not dropped) when this version rewrites the file — after a rollback, say.
+}).passthrough();
 export type DesktopState = z.infer<typeof DesktopState>;
 
 export function readDesktopState(path: string): DesktopState | undefined {

@@ -29,7 +29,8 @@ UninstallDisplayIcon={app}\KartaErgasias.exe
 UninstallDisplayName=Κάρτα Εργασίας
 
 [Languages]
-Name: "greek"; MessagesFile: "compiler:Languages\Greek.isl"
+; Greek.isl: Inno Setup's own Greek translation, put beside this file by the release workflow (pinned, checked).
+Name: "greek"; MessagesFile: "Greek.isl"
 
 [Files]
 Source: "{#Stage}\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
