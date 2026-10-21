@@ -72,10 +72,12 @@ begin
   Result := '';
 end;
 
+// Where the data stayed — SuppressibleMsgBox, so a silent uninstall (/SUPPRESSMSGBOXES) does not wait on a box nobody
+// sees (machine test, 22/10: a plain MsgBox kept the uninstaller running hidden).
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
   if CurUninstallStep = usPostUninstall then
-    MsgBox('Το πρόγραμμα αφαιρέθηκε. Το αρχείο σας (κάρτες, προσωπικό, αντίγραφα) ΔΕΝ σβήστηκε: είναι στον φάκελο' + #13#10 +
+    SuppressibleMsgBox('Το πρόγραμμα αφαιρέθηκε. Το αρχείο σας (κάρτες, προσωπικό, αντίγραφα) ΔΕΝ σβήστηκε: είναι στον φάκελο' + #13#10 +
       ExpandConstant('{localappdata}') + '\Karta Ergasias' + #13#10 +
-      'Κρατήστε το πέντε χρόνια — είναι υποχρέωση του εργοδότη.', mbInformation, MB_OK);
+      'Κρατήστε το πέντε χρόνια — είναι υποχρέωση του εργοδότη.', mbInformation, MB_OK, IDOK);
 end;

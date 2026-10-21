@@ -132,6 +132,9 @@ describe('the licence — EUPL-1.2 on every file of the package', () => {
     // Always Program Files: only an administrator may change the runtime the rules trust.
     expect(iss).toMatch(/^DisableDirPage=yes\r?$/m);
     expect(iss).toMatch(/^UsePreviousAppDir=no\r?$/m);
+    // A silent uninstall must not wait on a message box nobody sees: only the suppressible kind.
+    expect(iss).not.toMatch(/(?<!Suppressible)MsgBox\(/);
+    expect(iss).toContain('SuppressibleMsgBox(');
   });
 
   it('every source, test, migration, build and install file carries the SPDX line', () => {
