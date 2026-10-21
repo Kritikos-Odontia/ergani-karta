@@ -102,7 +102,7 @@ function setUp(): DesktopPaths {
   return paths;
 }
 
-function updater(paths: DesktopPaths, fake: Fake, more: { quiet?: (t: number, since: number) => boolean; now?: () => number; env?: NodeJS.ProcessEnv; stopFails?: boolean; version?: string } = {}) {
+function updater(paths: DesktopPaths, fake: Fake, more: { quiet?: (t: number, since: number) => boolean; now?: () => number; env?: NodeJS.ProcessEnv; stopFails?: boolean; version?: string; platform?: NodeJS.Platform; installedNode?: string } = {}) {
   const happened: string[] = [];
   const u = new Updater({
     paths,
@@ -118,6 +118,8 @@ function updater(paths: DesktopPaths, fake: Fake, more: { quiet?: (t: number, si
     api: fake.api,
     keys: TEST_KEYS,
     version: more.version ?? '0.1.0',
+    ...(more.platform === undefined ? {} : { platform: more.platform }),
+    ...(more.installedNode === undefined ? {} : { installedNode: more.installedNode }),
   });
   return { u, happened };
 }
@@ -249,6 +251,19 @@ describe('installing', () => {
     await u.install();
     expect(happened).toContain(`exit ${RESTART}`);
     expect(u.record()?.installProblem).toBeUndefined();
+  });
+
+  it('on Windows, a release on another Node.js is not installed by an update — it comes as a new installer; the same Node.js installs', async () => {
+    const fake = await fakeGithub();
+    fake.serve(release('0.2.0')); // made for Node.js 99.0.0
+    const other = setUp();
+    const { u, happened } = updater(other, fake, { platform: 'win32', installedNode: '24.22.1' });
+    expect((await u.install())?.problem).toMatch(/νέο Node\.js.*πρόγραμμα εγκατάστασης/);
+    expect(happened).toEqual([]);
+    expect(existsSync(join(other.versions, '0.2.0'))).toBe(false);
+    const same = setUp();
+    expect(await updater(same, fake, { platform: 'win32', installedNode: '99.0.0' }).u.install()).toBeUndefined();
+    expect(readFileSync(join(same.versions, 'current'), 'utf8').trim()).toBe('0.2.0');
   });
 
   it('the same Node.js is copied, not downloaded', async () => {

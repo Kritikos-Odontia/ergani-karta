@@ -60,7 +60,13 @@ with it.
   taken).
 - **Plain HTTP on the practice network.** Phones reach the staff page over the local network without TLS: the practice's
   own WPA2/WPA3 Wi-Fi only, never a guest or public network (the setup refuses a public address). On Windows the
-  installer opens port 8880 on private networks only; a page set to another port is not opened for phones.
+  installer's rules name the program every version runs on (the installed Node.js): port 8880 open on private networks
+  from the local network only, closed on public ones — so a Wi-Fi that Windows calls «Public» must be made «Private»
+  for phones; a page set to another port is not opened for phones.
+- **On Windows, a release on a new Node.js comes as a new installer.** Windows' firewall knows a program by its path;
+  every version runs on the installed Node.js, and the rules are made for it at install. An update that brings another
+  Node.js would run from a new path and be blocked until someone allows it — so such a release is not installed by an
+  update there (the «Ενημερώσεις» page says so); the new installer brings it.
 - **Night updates need the computer on at night.** A computer switched off every evening never updates by itself; the
   owner's «Ενημέρωση τώρα» does it. A version that rolled back is not tried again by itself.
 - **The rollback covers the probation.** A new version is undone, stores and all, only while it has filed nothing — up to

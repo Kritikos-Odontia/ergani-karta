@@ -12,7 +12,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const { version } = JSON.parse(readFileSync(join(here, 'version.json'), 'utf8'));
 const data = process.env.KARTA_DATA_DIR;
 const versions = join(data, 'versions');
-appendFileSync(join(data, 'runs.log'), `${version} launcher=${process.env.KARTA_LAUNCHER} args=${process.argv.slice(2).join(' ')}\n`);
+appendFileSync(join(data, 'runs.log'), `${version} launcher=${process.env.KARTA_LAUNCHER} args=${process.argv.slice(2).join(' ')} runtime=${process.env.KARTA_TEST_RUNTIME}\n`);
 const behaveFile = join(data, `behave-${version}.json`);
 const behave = existsSync(behaveFile) ? JSON.parse(readFileSync(behaveFile, 'utf8')) : {};
 if (behave.then !== undefined) writeFileSync(behaveFile, JSON.stringify(behave.then));

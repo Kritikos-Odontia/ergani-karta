@@ -2,6 +2,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { runtimeFor } from '../src/update/launcher.js';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -32,7 +33,7 @@ interface World {
 }
 
 /** An installed program carrying `bundled`, and an empty data folder. */
-function world(bundled: string): World {
+function world(bundled: string, bundledNode = '24.0.0'): World {
   const root = mkdtempSync(join(tmpdir(), 'karta-launcher-'));
   cleanup.push(() => rmSync(root, { recursive: true, force: true }));
   const install = join(root, 'install');
@@ -40,10 +41,10 @@ function world(bundled: string): World {
   mkdirSync(join(install, 'app'), { recursive: true });
   mkdirSync(data);
   const runtime = join(install, 'node');
-  writeFileSync(runtime, `#!/bin/sh\nexec "${process.execPath}" "$@"\n`);
+  writeFileSync(runtime, `#!/bin/sh\nKARTA_TEST_RUNTIME="$0" exec "${process.execPath}" "$@"\n`);
   chmodSync(runtime, 0o755);
   copyFileSync(FAKE, join(install, 'app', 'app.mjs'));
-  writeFileSync(join(install, 'app', 'version.json'), JSON.stringify({ version: bundled, node: '24.0.0' }));
+  writeFileSync(join(install, 'app', 'version.json'), JSON.stringify({ version: bundled, node: bundledNode }));
   return { data, install, runtime, versions: join(data, 'versions') };
 }
 
@@ -51,7 +52,7 @@ function world(bundled: string): World {
 function placed(w: World, version: string): void {
   const dir = join(w.versions, version);
   mkdirSync(dir, { recursive: true });
-  copyFileSync(w.runtime, join(dir, 'node'));
+  writeFileSync(join(dir, 'node'), `#!/bin/sh\nKARTA_TEST_RUNTIME="$0" exec "${process.execPath}" "$@"\n`);
   chmodSync(join(dir, 'node'), 0o700);
   copyFileSync(FAKE, join(dir, 'app.mjs'));
   writeFileSync(join(dir, 'version.json'), JSON.stringify({ version, node: '24.0.0' }));
@@ -214,6 +215,30 @@ describe.skipIf(process.platform === 'win32')('the launcher', () => {
     expect(started(w, '0.2.0')).toBe(1); // ran (its version.json whole), failed, undone
     expect(mark(w, 'current')).toBe('0.1.0');
   }, 20_000);
+
+  it('a version made for the installed Node.js runs on the installed runtime (one path for the firewall); another on its own copy', async () => {
+    const w = world('0.1.0', process.versions.node);
+    placed(w, '0.2.0'); // made for another Node.js (24.0.0)
+    behave(w, '0.1.0', { switchTo: '0.2.0' });
+    behave(w, '0.2.0', { commit: true, hang: true });
+    launch(w);
+    await until('0.2.0 running', () => started(w, '0.2.0') === 1);
+    const ran = runs(w).split('\n');
+    // The path each ran from: the installed runtime, not 0.1.0's own copy of it; 0.2.0's own copy.
+    expect(ran.find((l) => l.startsWith('0.1.0 launcher=1'))?.endsWith(`runtime=${w.runtime}`)).toBe(true);
+    expect(ran.find((l) => l.startsWith('0.2.0 launcher=1'))?.endsWith(`runtime=${join(w.versions, '0.2.0', 'node')}`)).toBe(true);
+  }, 20_000);
+
+  it('runtimeFor: the installed runtime for the same Node.js; the version\'s own copy for another, or an unreadable version.json', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'karta-runtime-'));
+    cleanup.push(() => rmSync(dir, { recursive: true, force: true }));
+    const o = { runtime: '/installed/node' };
+    writeFileSync(join(dir, 'version.json'), JSON.stringify({ version: '0.3.0', node: '24.22.1' }));
+    expect(runtimeFor(o, dir, '24.22.1')).toBe('/installed/node');
+    expect(runtimeFor(o, dir, '24.23.0')).toBe(join(dir, process.platform === 'win32' ? 'node.exe' : 'node'));
+    writeFileSync(join(dir, 'version.json'), '{');
+    expect(runtimeFor(o, dir, '24.22.1')).toBe(join(dir, process.platform === 'win32' ? 'node.exe' : 'node'));
+  });
 
   it('one launcher per data folder: a second one (the icon clicked again, no system service) leaves at once and starts nothing', async () => {
     const w = world('0.1.0');

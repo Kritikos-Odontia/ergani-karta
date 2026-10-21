@@ -99,7 +99,7 @@ export async function runLauncher(o: LauncherOptions): Promise<number> {
     const onProbation = readPending(paths.versions)?.to === version;
     const startedMs = now();
     log(`starting ${version}${onProbation ? ' (on probation)' : ''}`);
-    child = spawn(join(dir, binaryName()), [join(dir, 'app.mjs'), 'desktop', '--no-browser'], {
+    child = spawn(runtimeFor(o, dir), [join(dir, 'app.mjs'), 'desktop', '--no-browser'], {
       env: { ...o.env, KARTA_LAUNCHER: '1' },
       stdio: ['ignore', 'ignore', 'pipe'],
       windowsHide: true,
@@ -154,6 +154,22 @@ export async function runLauncher(o: LauncherOptions): Promise<number> {
   log('launcher stopped');
   only.release();
   return 0;
+}
+
+/**
+ * The runtime a version runs on: the INSTALLED one (the one running this launcher) when the version was made for the
+ * same Node.js — always, short of a release that changed it — else the version's own copy. One program path, so the
+ * system's firewall knows the program by the rule its installer made: Windows asks «allow this app?» for every new
+ * program path that listens on the network, and blocks the staff page until someone with an administrator's password
+ * answers — after every update, if each version ran its own copy (machine test, 22/10).
+ */
+export function runtimeFor(o: Pick<LauncherOptions, 'runtime'>, dir: string, installedNode = process.versions.node): string {
+  try {
+    if (VersionFile.parse(JSON.parse(readFileSync(join(dir, 'version.json'), 'utf8'))).node === installedNode) return o.runtime;
+  } catch {
+    /* unreadable: its own copy, as before */
+  }
+  return join(dir, binaryName());
 }
 
 /**

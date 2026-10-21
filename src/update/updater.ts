@@ -58,6 +58,9 @@ export interface UpdaterOptions {
   keys?: readonly string[];
   version?: string;
   fetch?: typeof fetch;
+  /** For the tests: another system, another installed Node.js. */
+  platform?: NodeJS.Platform;
+  installedNode?: string;
 }
 
 export class Updater {
@@ -182,6 +185,12 @@ export class Updater {
     try {
       const release = await this.#newest();
       if (release === undefined || !newer(release.verified.manifest.version, this.#version)) return 'δεν υπάρχει νεότερη έκδοση';
+      // Windows knows the program by its path: a version on another Node.js would run on a new path, and the firewall
+      // would block the staff page until someone allows it (launcher.ts runtimeFor). Such a release comes as a new
+      // installer, which brings that Node.js to the installed place, and the rule with it.
+      if ((this.#o.platform ?? process.platform) === 'win32' && release.verified.manifest.node !== (this.#o.installedNode ?? process.versions.node)) {
+        return `η έκδοση ${release.verified.manifest.version} φέρνει νέο Node.js: εγκαταστήστε τη με το νέο πρόγραμμα εγκατάστασης από τη σελίδα του έργου`;
+      }
       const notNow = this.#mayStop(by);
       if (notNow !== undefined) return notNow;
       const to = await this.#download(release);

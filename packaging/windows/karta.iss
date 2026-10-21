@@ -2,8 +2,10 @@
 ; THE WINDOWS INSTALLER (Inno Setup 6), built by .github/workflows/release.yml from the staged folder:
 ;   KartaErgasias.exe (packaging/windows/Starter.cs), node.exe, launcher.mjs, app\, licenses\
 ; Installed once, for the computer (administrator ONCE): the program in Program Files, a Start-menu and desktop icon,
-; the sign-in start for every user, and ONE firewall rule — the staff page's port 8880, on PRIVATE networks only and
-; from the local network only, so phones on the practice Wi-Fi reach it (never a public or guest network). The data stays per user and is NEVER
+; the sign-in start for every user, and the firewall rules for the program's own Node.js (the one every version runs
+; on — launcher.ts runtimeFor): port 8880 open on PRIVATE networks from the local network only, so phones on the practice
+; Wi-Fi reach it, and closed on PUBLIC ones (a guest network) — a rule for each, so Windows never asks «allow this app?»
+; (an unanswered ask blocks the staff page). Rules Windows made by itself for older per-version copies are removed. The data stays per user and is NEVER
 ; removed by the uninstaller: it is the employer's five-year record. Updates need no installer and no administrator.
 #define AppVersion GetEnv("KARTA_VERSION")
 #define Stage GetEnv("KARTA_STAGE")
@@ -44,12 +46,15 @@ Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 
 [Run]
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""Karta Ergasias 8880"""; Flags: runhidden
-Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""Karta Ergasias 8880"" dir=in action=allow protocol=TCP localport=8880 profile=private remoteip=localsubnet"; Flags: runhidden
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -NonInteractive -Command ""Get-NetFirewallApplicationFilter | Where-Object {{ $_.Program -like '*\Karta Ergasias\versions\*' } | Get-NetFirewallRule | Remove-NetFirewallRule"""; Flags: runhidden
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""Karta Ergasias 8880"" dir=in action=allow program=""{app}\node.exe"" protocol=TCP localport=8880 profile=private remoteip=localsubnet"; Flags: runhidden
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""Karta Ergasias 8880"" dir=in action=block program=""{app}\node.exe"" profile=public"; Flags: runhidden
 Filename: "{app}\KartaErgasias.exe"; Description: "Άνοιγμα της Κάρτας Εργασίας"; Flags: postinstall nowait skipifsilent runasoriginaluser
 
 [UninstallRun]
 Filename: "{sys}\taskkill.exe"; Parameters: "/F /T /IM KartaErgasias.exe"; Flags: runhidden; RunOnceId: "StopKarta"
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""Karta Ergasias 8880"""; Flags: runhidden; RunOnceId: "FirewallRule"
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -NonInteractive -Command ""Get-NetFirewallApplicationFilter | Where-Object {{ $_.Program -like '*\Karta Ergasias\versions\*' } | Get-NetFirewallRule | Remove-NetFirewallRule"""; Flags: runhidden; RunOnceId: "StaleRules"
 
 [Code]
 // A program already running holds node.exe: stop it before its files are replaced (an installer over an older one).

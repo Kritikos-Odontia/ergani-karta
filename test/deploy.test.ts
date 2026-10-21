@@ -110,6 +110,16 @@ describe('the licence — EUPL-1.2 on every file of the package', () => {
     expect(iss.toString('utf8')).toContain('AppName=Κάρτα Εργασίας');
   });
 
+  it('the Windows firewall rules name the program every version runs on — open on private networks, closed on public ones', () => {
+    const iss = readFileSync(join(root, 'packaging', 'windows', 'karta.iss'), 'utf8');
+    const adds = iss.split('\n').filter((line) => line.includes('firewall add rule'));
+    expect(adds).toHaveLength(2);
+    expect(adds[0]).toContain('action=allow program=""{app}\\node.exe"" protocol=TCP localport=8880 profile=private remoteip=localsubnet');
+    expect(adds[1]).toContain('action=block program=""{app}\\node.exe"" profile=public');
+    // Rules Windows made by itself for older per-version copies go, at install and at uninstall.
+    expect(iss.match(/Karta Ergasias\\versions\\\*' \} \| Get-NetFirewallRule \| Remove-NetFirewallRule/g)).toHaveLength(2);
+  });
+
   it('every source, test, migration, build and install file carries the SPDX line', () => {
     // JSON and property lists cannot carry a comment; the pictures are not code.
     const carriesNoComment = (f: string) => /(\.(json|plist|png|icns|ico|svg)|[\\/]control)$/.test(f);
