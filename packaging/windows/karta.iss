@@ -1,4 +1,4 @@
-; SPDX-License-Identifier: EUPL-1.2
+﻿; SPDX-License-Identifier: EUPL-1.2
 ; THE WINDOWS INSTALLER (Inno Setup 6), built by .github/workflows/release.yml from the staged folder:
 ;   KartaErgasias.exe (packaging/windows/Starter.cs), node.exe, launcher.mjs, app\, licenses\
 ; Installed once, for the computer (administrator ONCE): the program in Program Files, a Start-menu and desktop icon,

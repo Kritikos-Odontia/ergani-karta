@@ -104,6 +104,12 @@ describe('the licence — EUPL-1.2 on every file of the package', () => {
     expect(readFileSync(join(root, 'LICENSE'), 'utf8')).toMatch(/EUROPEAN UNION PUBLIC LICEN[CS]E v\. ?1\.2/i);
   });
 
+  it('the Windows installer script is UTF-8 WITH its byte-order mark — so Inno Setup reads its Greek as Greek', () => {
+    const iss = readFileSync(join(root, 'packaging', 'windows', 'karta.iss'));
+    expect([...iss.subarray(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
+    expect(iss.toString('utf8')).toContain('AppName=Κάρτα Εργασίας');
+  });
+
   it('every source, test, migration, build and install file carries the SPDX line', () => {
     // JSON and property lists cannot carry a comment; the pictures are not code.
     const carriesNoComment = (f: string) => /(\.(json|plist|png|icns|ico|svg)|[\\/]control)$/.test(f);

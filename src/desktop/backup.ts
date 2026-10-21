@@ -28,6 +28,10 @@ export function backupNow(paths: DesktopPaths, chosen: string, nowMs: number): s
     throw new Error('ο φάκελος των αντιγράφων δεν βρέθηκε — είναι συνδεδεμένο το USB;');
   }
   assertOutsideCodeFolders(chosen, 'ο φάκελος των αντιγράφων');
+  // ⛔ Both stores, or no backup: one without the other is not a copy of the record, and counting it among the ones kept
+  // would push out a whole one. (The program, once set up, has both; a missing one is a lost record — main.ts.)
+  const missing = [paths.stampDb, paths.recordsDb].filter((store) => !existsSync(store));
+  if (missing.length > 0) throw new Error(`λείπει το αρχείο ${missing.join(', ')} — δεν γράφτηκε αντίγραφο· τα προηγούμενα μένουν`);
   // Written as `<name>.partial`, renamed to its own name only when whole: a backup that failed half-way (the stick
   // pulled out, the disk full) is removed, and never counts among the ones kept.
   const target = newRequestFolder(join(chosen, BACKUPS), 'karta', nowMs);
@@ -38,7 +42,6 @@ export function backupNow(paths: DesktopPaths, chosen: string, nowMs: number): s
       [paths.stampDb, 'stamp.sqlite'],
       [paths.recordsDb, 'records.sqlite'],
     ] as const) {
-      if (!existsSync(store)) continue;
       const db = new DatabaseSync(store, { readOnly: true });
       try {
         db.exec('PRAGMA busy_timeout = 5000');

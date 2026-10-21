@@ -87,6 +87,17 @@ describe('the backup', () => {
     expect(readdirSync(join(stick, BACKUPS, left[0]!)).sort()).toEqual(['exports', 'records.sqlite', 'stamp.sqlite']);
   });
 
+  it('⛔ a store gone while the program runs: no backup, none of the 30 whole ones pushed out — each kept one holds both', () => {
+    const paths = installation();
+    const stick = scratch('usb-');
+    for (let day = 0; day < KEEP; day += 1) backupNow(paths, stick, AT + day * 86_400_000);
+    rmSync(paths.stampDb);
+    expect(() => backupNow(paths, stick, AT + KEEP * 86_400_000)).toThrow(/λείπει το αρχείο .*stamp\.sqlite/);
+    const left = readdirSync(join(stick, BACKUPS)).sort();
+    expect(left).toHaveLength(KEEP);
+    for (const name of left) expect(readdirSync(join(stick, BACKUPS, name))).toEqual(expect.arrayContaining(['records.sqlite', 'stamp.sqlite']));
+  });
+
   it('is due when a folder is chosen and the last good backup is a day old — or the last one failed', () => {
     expect(backupDue({}, AT)).toBe(false);
     expect(backupDue({ backupFolder: '/x' }, AT)).toBe(true);
@@ -143,6 +154,7 @@ describe('the stores, once made', () => {
     expect(steps).toContain(`<code>stamp.sqlite</code> στον φάκελο <code>${dirname(paths.stampDb)}</code>`);
     expect(steps).toContain(`<code>records.sqlite</code> στον φάκελο <code>${dirname(paths.recordsDb)}</code>`);
     expect(steps).toContain('επανεκκινήστε τον υπολογιστή');
+    expect(steps).toContain('δείτε πρώτα στην ΕΡΓΑΝΗ'); // a card sent after the backup must not be filed twice
     expect(steps).not.toContain('«Αντίγραφα»'); // a page that is not served in this state
   });
 });
