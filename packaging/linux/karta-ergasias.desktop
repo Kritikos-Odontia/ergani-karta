@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: EUPL-1.2
+[Desktop Entry]
+Type=Application
+Name=Κάρτα Εργασίας
+Comment=Ψηφιακή κάρτα εργασίας — ΕΡΓΑΝΗ
+Exec=@PREFIX@/node @PREFIX@/launcher.mjs open
+Icon=@PREFIX@/icon.png
+Terminal=false
+Categories=Office;

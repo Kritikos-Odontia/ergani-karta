@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: EUPL-1.2
+# Κάρτα Εργασίας — the launcher, as the signed-in user's own service: it starts at sign-in and keeps the program running.
+[Unit]
+Description=Κάρτα Εργασίας
+After=network-online.target
+
+[Service]
+ExecStart=/opt/karta-ergasias/node /opt/karta-ergasias/launcher.mjs run
+Restart=on-failure
+RestartSec=5
+# The launcher passes the stop on and waits for the card on its way.
+KillMode=mixed
+TimeoutStopSec=100
+
+[Install]
+WantedBy=default.target

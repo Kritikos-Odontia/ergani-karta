@@ -1,0 +1,22 @@
+name: Πρόταση / Feature request
+description: Κάτι που θα βοηθούσε ένα ιατρείο · Something that would help a practice
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Πριν από μια πρόταση, δείτε το docs/RULES.md — μερικά πράγματα είναι εκτός σκοπού επίτηδες (π.χ. ο εργοδότης
+        να χτυπά κάρτα για εργαζόμενο, μισθοδοσία, δηλώσεις ωραρίου).
+        Before proposing, see docs/RULES.md — some things are out of scope on purpose (e.g. the employer stamping for
+        an employee, payroll, schedule declarations).
+  - type: textarea
+    id: need
+    attributes:
+      label: Τι χρειάζεστε · What you need
+      description: Η ανάγκη του ιατρείου, όχι η λύση · The practice's need, not the solution
+    validations:
+      required: true
+  - type: textarea
+    id: today
+    attributes:
+      label: Πώς το κάνετε σήμερα · How you do it today

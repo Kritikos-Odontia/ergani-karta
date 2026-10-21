@@ -1,0 +1,3 @@
+# ⛔ The ministry's files are evidence, byte for byte — never let git rewrite their CRLF line endings.
+test/fixtures/ministry/*.xsd -text
+test/fixtures/ministry/*.json -text

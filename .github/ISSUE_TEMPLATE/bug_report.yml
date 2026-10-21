@@ -1,0 +1,35 @@
+name: Πρόβλημα / Bug report
+description: Κάτι δεν δουλεύει όπως περιγράφεται · Something does not work as documented
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ⛔ **Μη γράψετε πραγματικό ΑΦΜ, όνομα, χρήστη ή κωδικό ΕΡΓΑΝΗ, ή αριθμό πρωτοκόλλου.** Φτιαγμένες τιμές αρκούν.
+        ⛔ **Do not include a real ΑΦΜ, name, ΕΡΓΑΝΗ login or protocol number.** Fabricated values are enough.
+        Κενό ασφαλείας; **Όχι εδώ** — δείτε το SECURITY.md · A security flaw? **Not here** — see SECURITY.md.
+  - type: textarea
+    id: what
+    attributes:
+      label: Τι έγινε · What happened
+      description: Τι κάνατε, τι περιμένατε, τι είδατε · What you did, what you expected, what you saw
+    validations:
+      required: true
+  - type: textarea
+    id: ergani
+    attributes:
+      label: Η απάντηση της ΕΡΓΑΝΗ, αν υπήρξε · ΕΡΓΑΝΗ's answer, if any
+      description: Η πρόταση της ΕΡΓΑΝΗ αυτούσια, με ό,τι αναγνωριστικό αφαιρεμένο · The sentence verbatim, identifiers removed
+  - type: input
+    id: version
+    attributes:
+      label: Έκδοση · Version
+      description: Το commit (`git rev-parse --short HEAD`) · The commit you run
+  - type: dropdown
+    id: realm
+    attributes:
+      label: Περιβάλλον ΕΡΓΑΝΗ · ΕΡΓΑΝΗ realm
+      options:
+        - δοκιμαστικό · trial
+        - πραγματικό · production
+        - δεν σχετίζεται · not relevant

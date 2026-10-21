@@ -1,0 +1,51 @@
+{
+	"Cards": {
+		"Card": [
+			{
+				"f_afm_ergodoti": "000000001",
+				"f_aa": "0",
+				"f_comments": "Submission 1 from API call",
+				"Details": {
+					"CardDetails": [
+						{
+							"f_afm": "000000000",
+							"f_eponymo": "ΚΑΠΟΙΟΣ",
+							"f_onoma": "ΑΛΛΟΣ",
+							"f_type": "0",
+							"f_reference_date": "2022-05-13",
+							"f_date": "2022-05-13T09:00:00.7099109+03:00",
+							"f_aitiologia": "002"
+						}
+					]
+				}
+			},
+			{
+				"f_afm_ergodoti": "000000001",
+				"f_aa": "1",
+				"f_comments": "Submission 2 from API call",
+				"Details": {
+					"CardDetails": [
+						{
+							"f_afm": "000000002",
+							"f_eponymo": "ΚΑΠΟΙΟΣ1",
+							"f_onoma": "ΑΛΛΟΣ1",
+							"f_type": "0",
+							"f_reference_date": "2022-05-12",
+							"f_date": "2022-05-12T09:00:00.7099109+03:00",
+							"f_aitiologia": "002"
+						},
+						{
+							"f_afm": "000000003",
+							"f_eponymo": "ΚΑΠΟΙΟΣ2",
+							"f_onoma": "ΑΛΛΟΣ2",
+							"f_type": "1",
+							"f_reference_date": "2022-05-12",
+							"f_date": "2022-05-12T18:00:00.7099109+03:00",
+							"f_aitiologia": "002"
+						}
+					]
+				}
+			}
+		]
+	}
+}

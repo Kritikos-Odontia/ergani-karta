@@ -1,0 +1,82 @@
+# SPDX-License-Identifier: EUPL-1.2
+# ONE EMPLOYER'S INSTALLATION (docs/INSTALL.md). Its settings are the file `.env` beside this one, written by
+#   docker compose run --rm setup
+# ⛔ The page is published on ONE private address of this machine (ERGANI_BIND_ADDRESS, checked by setup): the practice's
+#   own network or a private overlay such as Tailscale — never the internet, never 0.0.0.0.
+# ⓘ The project's name comes from `.env` (COMPOSE_PROJECT_NAME=ergani-<the employer's short name>, written by setup),
+#   so its volumes are named after the employer: `ergani-<name>_stamp` and `ergani-<name>_records` ARE the five-year
+#   record — never change the name once installed. A second employer on the same machine is a second copy of this
+#   folder with its own setup: its own name, stores, logins and port. Nothing is shared.
+
+# Used only before setup has written `.env`.
+name: ergani
+
+x-hardened: &hardened
+  build: .
+  image: ${COMPOSE_PROJECT_NAME:-ergani}:local
+  env_file:
+    - path: .env
+      required: false
+  read_only: true
+  tmpfs:
+    - /tmp
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+  restart: unless-stopped
+
+services:
+  # The reception pages (one per branch) and the outbox that files every card to ΕΡΓΑΝΗ inside its 15 minutes.
+  stamp:
+    <<: *hardened
+    command: ["ergani", "stamp"]
+    # On a stop (an update), a card on its way to a slow ΕΡΓΑΝΗ may take a minute and more to answer: let it finish
+    # rather than be killed mid-send after Docker's default 10 s.
+    stop_grace_period: 90s
+    environment:
+      STAMP_DB: /data/stamp/stamp.sqlite
+      STAMP_LISTEN_HOST: 0.0.0.0
+      STAMP_PORT: "8880"
+    ports:
+      - "${ERGANI_BIND_ADDRESS:-127.0.0.1}:${ERGANI_PORT:-8880}:8880"
+    volumes:
+      - stamp:/data/stamp
+    mem_limit: 384m
+    pids_limit: 200
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8880/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # The monthly archive: READ ONLY. Every day at 03:15 (Athens) it copies the months ΕΡΓΑΝΗ still holds into the
+  # five-year record, and writes each month's comparison page.
+  archive:
+    <<: *hardened
+    command: ["ergani", "archive"]
+    environment:
+      ERGANI_RECORDS_DB: /data/records/records.sqlite
+    volumes:
+      - records:/data/records
+    mem_limit: 256m
+    pids_limit: 100
+
+  # The guided first setup: asks, checks, and writes `.env` here. ⛔ No network at all — it sends nothing anywhere.
+  setup:
+    build: .
+    image: ${COMPOSE_PROJECT_NAME:-ergani}:local
+    profiles: ["setup"]
+    command: ["ergani", "setup", "--out", "/install/.env"]
+    # Root inside this one container only, so it can write `.env` into this folder and hand it to the folder's owner.
+    user: root
+    network_mode: none
+    stdin_open: true
+    tty: true
+    volumes:
+      - ./:/install
+
+volumes:
+  stamp:
+  records:

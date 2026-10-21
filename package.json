@@ -1,0 +1,32 @@
+{
+  "name": "ergani-karta",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Ψηφιακή κάρτα εργασίας — staff stamp their own ΕΝΑΡΞΗ/ΛΗΞΗ, filed to ΕΡΓΑΝΗ ΙΙ, plus the five-year monthly archive. Software an employer runs itself.",
+  "license": "EUPL-1.2",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/odontia/ergani-karta"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "ergani": "tsx src/cli.ts",
+    "build:desktop": "node --import tsx scripts/build.ts"
+  },
+  "dependencies": {
+    "qrcode-generator": "2.0.4",
+    "tsx": "^4.19.3",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "esbuild": "0.28.2",
+    "typescript": "^5.7.2",
+    "vitest": "^4.1.11"
+  }
+}

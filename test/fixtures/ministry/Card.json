@@ -1,0 +1,19 @@
+{
+	"Cards": {
+		"Card": [
+			{
+				"f_afm_ergodoti": "111111111",
+				"f_aa": "0",
+                "f_comments": "test",
+				"Details": {
+					
+						"CardDetails": [
+                            {"f_afm": "999999999","f_eponymo": "ΤΕΣΤ","f_onoma": "ΤΕΣΤ","f_type": "1","f_reference_date":"2022-04-21","f_date": "2022-04-21T12:45:00","f_aitiologia": "",}
+							
+                        ]
+
+				}
+			}
+		]
+	}
+}

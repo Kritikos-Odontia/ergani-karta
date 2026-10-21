@@ -1,0 +1,16 @@
+node_modules/
+*.log
+.DS_Store
+
+# ⛔⛔ NEVER COMMIT THE SETTINGS FILE. It holds the employer's restricted ΕΡΓΑΝΗ logins (written by `ergani setup`).
+# These patterns are a backstop, not the control: the file is written 0600, outside the record.
+.env
+.env.*
+
+# ⛔ A store holds ΑΦΜ and working hours. It never belongs in git (and the code refuses to write one inside a code
+# folder: src/code-folders.ts).
+*.sqlite
+*.sqlite-journal
+*.sqlite3
+exports/
+dist/

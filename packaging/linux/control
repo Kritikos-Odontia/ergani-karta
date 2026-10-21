@@ -1,0 +1,12 @@
+Package: karta-ergasias
+Version: @VERSION@
+Architecture: amd64
+Maintainer: ergani-karta <https://github.com/odontia/ergani-karta>
+Homepage: https://github.com/odontia/ergani-karta
+Recommends: xdg-utils
+Section: misc
+Priority: optional
+Description: Κάρτα Εργασίας — ψηφιακή κάρτα εργασίας για την ΕΡΓΑΝΗ
+ Staff stamp their own start and end of work; each card is filed to ΕΡΓΑΝΗ II
+ within 15 minutes with the branch's restricted login, and the five-year
+ monthly archive is kept. Software an employer runs on its own computer.

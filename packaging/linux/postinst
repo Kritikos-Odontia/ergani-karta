@@ -1,0 +1,5 @@
+#!/bin/sh
+# SPDX-License-Identifier: EUPL-1.2
+# Start at every user's sign-in. (It runs for a user from their next sign-in, or when they open the icon.)
+set -e
+systemctl --global enable karta-ergasias.service >/dev/null 2>&1 || true

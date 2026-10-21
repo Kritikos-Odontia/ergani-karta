@@ -1,0 +1,43 @@
+# SPDX-License-Identifier: EUPL-1.2
+# The type-check and the test suite, on every pull request and every push to the default branch.
+#
+# ⛔ CI NEVER REACHES AN ΕΡΓΑΝΗ HOST. The tests file to a local fake with fabricated people; a runtime fence
+# (test/setup.ts, asserted by test/fence.test.ts) refuses every ΕΡΓΑΝΗ address inside `npm test`. The trial realm is a
+# live government system too. No secret is configured for this workflow, and none is needed.
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    # The standard GitHub-hosted runner.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+
+      - run: npm ci --no-audit --no-fund
+
+      - name: types
+        run: npm run typecheck
+
+      - name: tests
+        run: npm test

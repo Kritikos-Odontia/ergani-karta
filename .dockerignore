@@ -1,0 +1,14 @@
+# The image needs package*.json, tsconfig.json and src/ only (Dockerfile).
+# ⛔ Never the settings file: it is handed to the containers by Compose at run time, never baked into an image.
+.git
+.github
+node_modules
+test
+docs
+*.md
+*.sqlite
+*.sqlite-journal
+*.log
+.env
+.env.*
+exports

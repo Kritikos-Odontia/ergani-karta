@@ -1,0 +1,6 @@
+#!/bin/sh
+# SPDX-License-Identifier: EUPL-1.2
+# Stop it for everyone and no longer start it. The data in each user's ~/.local/share/karta-ergasias stays.
+set -e
+systemctl --global disable karta-ergasias.service >/dev/null 2>&1 || true
+pkill -TERM -f /opt/karta-ergasias/launcher.mjs >/dev/null 2>&1 || true
