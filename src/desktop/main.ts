@@ -38,9 +38,10 @@ import { VERSION } from '../version.js';
  * ⓘ The services are the gated ones, unchanged: this file only gives them their settings and starts them.
  */
 export async function runDesktop(argv: readonly string[], outside: NodeJS.ProcessEnv = process.env): Promise<void> {
-  // ⛔ TEST RELEASE ONLY (the forced-rollback test; never on main): run from versions/, as an installed copy runs it,
-  // this version cannot start — so the launcher must undo the switch to it by itself.
-  if (/[\\/]versions[\\/][0-9.]+[\\/]app\.mjs$/.test(fileURLToPath(import.meta.url))) throw new Error('test release: broken on purpose');
+  // ⛔ TEST RELEASE ONLY (the forced-rollback test; never on main): run from versions/ by an INSTALLED copy (its data
+  // folder the system's own — the tests always set KARTA_DATA_DIR, and the release build runs them), this version
+  // cannot start — so the launcher must undo the switch to it by itself.
+  if (outside['KARTA_DATA_DIR'] === undefined && /[\\/]versions[\\/][0-9.]+[\\/]app\.mjs$/.test(fileURLToPath(import.meta.url))) throw new Error('test release: broken on purpose');
   const { values } = parseArgs({ args: [...argv], options: { 'no-browser': { type: 'boolean', default: false }, 'no-open': { type: 'boolean', default: false } }, strict: true, allowPositionals: false });
   const root = dataDir(outside);
   mkdirSync(root, { recursive: true, mode: 0o700 });
