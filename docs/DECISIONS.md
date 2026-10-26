@@ -112,3 +112,13 @@ holds it for as long as it lives, and refuses to start without it (`src/stamp/st
 A Χρήστης Παραρτήματος acts for its own branch (the ministry's CardScanner guide: «…όλες τις ενέργειες/δηλώσεις που
 αφορούν το συγκεκριμένο παράρτημα»), and no read can prove filing rights for another branch. So every branch has its
 own login, and the same login serves that branch's stamping and its monthly archive reads.
+
+## A restored snapshot never resumes old sends automatically
+
+A card pending in yesterday's backup may have reached ΕΡΓΑΝΗ afterwards. Starting that old outbox immediately would re-send it without the owner noticing. Complete desktop recovery therefore restores both record files unchanged into a fresh data folder and persists a hold before any files are copied. No staff page, archive or sender starts until the owner checks every old unresolved card with the accountant, records it as covered/left to the accountant, and confirms that the old installation has stopped. New cards then use the ordinary path. The record stays append-only; reconciliation adds decisions, never rewrites attempts or cards.
+
+The settings and owner state travel in an AES-256-GCM envelope, with integrity hashes for both record files. Its key is domain-separated from the existing owner's scrypt verifier; only that verifier's salt is public, and the verifier itself is inside the encrypted state. This permits automatic daily backups without retaining the owner's clear password and permits recovery on a new machine with the owner password used for that snapshot. The live settings file keeps its existing owner-only protection. Record files and exports remain private files, not encrypted archives. No operating-system secret store is needed for recovery across computers.
+
+## A read-only connection check leaves restricted permissions to the owner
+
+Sign-in and a form in `Lookup/Submissions` do not demonstrate permission to submit it, exclusion of other forms, API-only access or the correct branch. No fake card is filed to test those claims. The check says exactly which reads succeeded and asks the owner to reload each user in the ministry portal and explicitly confirm its restrictions. The desktop records when the owner confirmed the current settings; a settings change invalidates that confirmation. A portal-only change cannot be detected by this program.
