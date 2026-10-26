@@ -32,8 +32,8 @@
 
 Η εξαγωγή δεν ζητά νέα στοιχεία από την ΕΡΓΑΝΗ: χρησιμοποιεί τα δύο αρχεία του υπολογιστή. Αν το μηνιαίο αρχείο
 λείπει, δημιουργείται εξαγωγή τοπικών καρτών με ρητή σημείωση. Ημέρα που δεν έχει αναγνωστεί **δεν σημαίνει** ημέρα
-χωρίς κάρτα. Η περίοδος αφορά την **εργάσιμη ημέρα**: μια ΛΗΞΗ μετά τα μεσάνυχτα περιλαμβάνεται μαζί με την ημέρα
-της ΕΝΑΡΞΗΣ της. Τα δοκιμαστικά στοιχεία επισημαίνονται ως δοκιμή σε κάθε γραμμή.
+χωρίς κάρτα. Η περίοδος αφορά την **εργάσιμη ημέρα που αποθηκεύτηκε στην κάρτα**. Για νυχτερινή ΛΗΞΗ ισχύουν τα
+όρια που περιγράφονται παρακάτω. Τα δοκιμαστικά στοιχεία επισημαίνονται ως δοκιμή σε κάθε γραμμή.
 
 Το ZIP δεν περιέχει τον κωδικό ΕΡΓΑΝΗ, PIN ή ρυθμίσεις σύνδεσης. Περιέχει όμως ΑΦΜ, ονόματα και ώρες εργασίας,
 και δεν είναι κρυπτογραφημένο: φυλάξτε το όπως το ίδιο το αρχείο. Η δημιουργία του δεν στέλνει τίποτα στον λογιστή.
@@ -41,7 +41,7 @@
 
 ## Ημερολόγιο υπενθυμίσεων
 
-**Μόνο υπενθυμίσεις. Το ημερολόγιο δεν δηλώνει ωράριο ή άδεια στην ΕΡΓΑΝΗ· οι δηλώσεις μένουν στον λογιστή.**
+**Το ημερολόγιο αλλάζει τις υπενθυμίσεις και βοηθά να αναγνωριστεί η εργάσιμη ημέρα μιας νυχτερινής ΛΗΞΗΣ. Δεν δηλώνει ωράριο ή άδεια στην ΕΡΓΑΝΗ· οι δηλώσεις μένουν στον λογιστή.**
 
 Στη σελίδα **Ημερολόγιο**:
 
@@ -50,7 +50,7 @@
 - Για αλλαγή ωρών: διαλέξτε εργαζόμενο και συγκεκριμένο παράρτημα, ημέρα ή περίοδο, και ώρες όπως
   `09:00-13:00,17:00-21:00`. Πατήστε **Αλλαγή ωρών**. Αυτές αντικαθιστούν τις παλιές ώρες για τις υπενθυμίσεις,
   ακόμη κι αν το παράρτημα δεν διαβάζει ωράριο από την ΕΡΓΑΝΗ. Η τελευταία βάρδια μπορεί να τελειώνει μετά τα
-  μεσάνυχτα, π.χ. `22:00-02:00`· η υπενθύμιση ΛΗΞΗΣ κρατά την εργάσιμη ημέρα της.
+  μεσάνυχτα, π.χ. `22:00-08:00`· η υπενθύμιση ΛΗΞΗΣ κρατά την εργάσιμη ημέρα της.
 - Για άρση άδειας: επιλέξτε την ίδια περίοδο και «Όλα» και πατήστε **Άρση για την επιλογή**. Για άρση αλλαγής ωρών,
   επιλέξτε το ίδιο παράρτημα. Επιστρέφουν οι κανονικές προσδοκίες του προγράμματος.
 - Για κλειστή ημέρα / αργία όλου του ιατρείου: συμπληρώστε τη δεύτερη φόρμα. Η επιλογή **Ανοικτή** υπερισχύει και
@@ -60,6 +60,8 @@
 υπάρχουν προσωπικές ώρες. Για εργασία τότε, σημειώστε την ημέρα ανοικτή. Καταγραφές και άρσεις διατηρούνται όλες·
 δεν αλλάζουν παλιές κάρτες. Μια πραγματική ανοικτή ΕΝΑΡΞΗ εξακολουθεί να ελέγχεται για ΛΗΞΗ, και οι ειδοποιήσεις
 αποτυχημένης υποβολής δεν σταματούν από άδεια ή αργία.
+
+Για ανοικτή ΕΝΑΡΞΗ της προηγούμενης ημέρας, η σελίδα προτείνει ΛΗΞΗ και τη γράφει στην ημέρα της ΕΝΑΡΞΗΣ πριν από τις 06:00 ή όσο την καλύπτει η καταχωρισμένη νυχτερινή βάρδια, έως και την ώρα λήξης. Ισχύουν οι τρέχουσες ώρες του εργαζομένου, της ημέρας και του παραρτήματος της ΕΝΑΡΞΗΣ, ακόμη κι αν η αποχώρηση γίνει από άλλο παράρτημα. Χωρίς καταχωρισμένες ώρες που καλύπτουν τη ΛΗΞΗ, από τις 06:00 προτείνεται ΕΝΑΡΞΗ και η ΛΗΞΗ ανήκει στη νέα ημέρα. Το παλιό ωράριο της ΕΡΓΑΝΗ δεν επεκτείνει αυτό το όριο.
 
 Οι ενσωματωμένες ημερομηνίες βασίζονται στη
 [λίστα της Επιθεώρησης Εργασίας](https://www.hli.gov.gr/ergasiakes-scheseis/nomothesia-ergasiakes-scheseis/chronika-oria-ergasias/kyriaki-argies/imeres-argias/):
@@ -76,7 +78,7 @@
 
 The owner signs in locally and opens **Για τον λογιστή** (For the accountant). Select a month, or enter both date
 bounds, then create the ZIP. The new folder contains the ZIP, Greek UTF-8 Excel CSVs and the available proof PDFs.
-The period uses the working day, so an overnight departure stays with its arrival's date.
+The period uses the working day saved on each card; overnight departures follow the boundaries below.
 
 Local movements, every submission attempt, unresolved cards, saved ministry intervals and read-back coverage are
 separate files. Every row identifies its source and environment. A protocol confirms submission; it does not claim a
@@ -90,6 +92,8 @@ branch (including split shifts and an overnight final interval), or practice-wid
 withdrawal is a new retained fact. Leave overrides replacement hours; closure suppresses expected arrivals across all
 branches. Actual open arrivals still receive departure reminders, and submission failures remain visible. Existing
 closed-day tools still work. Without an override, the month-late schedule remains the source.
+
+A departure closing yesterday's open arrival keeps that day before 06:00, or while the current overnight calendar interval for that employee, day and arrival branch covers departure, including its exact ending time. Departure may be at another branch. Otherwise, from 06:00 the page suggests arrival and a departure belongs to the new day. The older imported schedule does not extend this boundary.
 
 National holiday dates are built in and Orthodox Easter is computed for 1900–2199. May Day transfers, local holidays
 and exceptional dates need an owner entry after checking with the accountant. The calendar files no schedule or

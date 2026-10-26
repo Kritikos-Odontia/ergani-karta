@@ -20,9 +20,9 @@
 σελίδες, μετά τη σύνδεση του εργοδότη.
 
 Μην ξαναχτυπήσετε μία ήδη καταγεγραμμένη κάρτα επειδή εκκρεμεί η επιβεβαίωση ή το PDF της. Το **CardScanner** είναι η
-εφεδρεία όταν η σελίδα των εργαζομένων δεν μπορεί να πάρει καθόλου χτύπημα ([STAFF-SHEET.md](STAFF-SHEET.md)). Αν μια
-κάρτα δεν σταλεί μέσα σε δεκαπέντε λεπτά, ο εργοδότης ειδοποιεί την Επιθεώρηση Εργασίας όταν αρχίζει το πρόβλημα και
-όταν τελειώνει· η επιλογή αιτίας δεν αντικαθιστά αυτές τις ειδοποιήσεις.
+εφεδρεία όταν η σελίδα των εργαζομένων δεν μπορεί να πάρει καθόλου χτύπημα ([STAFF-SHEET.md](STAFF-SHEET.md)). Ο
+εργοδότης ειδοποιεί ΑΜΕΣΑ την Επιθεώρηση Εργασίας μόλις ένα πρόβλημα εμποδίσει την αποστολή και ΞΑΝΑ μόλις
+τελειώσει, ακόμη κι αν οι κάρτες σταλούν μέσα σε δεκαπέντε λεπτά. Η επιλογή αιτίας δεν αντικαθιστά αυτές τις δύο ειδοποιήσεις.
 
 **Όριο της ένδειξης αρχείου:** η ώρα επιτυχίας αφορά ολόκληρο τον ημερήσιο έλεγχο, που μπορεί να χρησιμοποιεί πλήρεις αναγνώσεις έως επτά ημερών· δεν σημαίνει ότι ξαναδιαβάστηκε κάθε κίνηση τότε. Μέχρι να αποθηκευτεί ο πρώτος ημερήσιος έλεγχος, μπορεί να εμφανίζεται χωριστά η τελευταία πλήρης ανάγνωση ενός μήνα / παραρτήματος, χωρίς να παρουσιάζεται ως επιτυχία όλου του αρχείου. Μια νεότερη αποτυχία ή σελίδα σύγκρισης που δεν γράφτηκε παραμένει ορατή δίπλα στην προηγούμενη επιτυχία ([KNOWN-LIMITS.md](KNOWN-LIMITS.md)).
 
@@ -36,6 +36,10 @@ day, including an overnight exit whose working day is yesterday.
 Opening Home only reads local records. It does not file cards, approve late submissions, call the connection check or
 make a backup. A successful filing can still lack its proof PDF: the queue lists these cards while automatic retrieval
 continues, and says when retrieval has stopped because the filing is too old. Never stamp again to obtain a receipt.
+
+The employer notifies the Labour Inspectorate immediately when a condition prevents transmission, and again as soon
+as it ends, even if later retries deliver every card within fifteen minutes. Selecting a late-filing reason does not
+replace these two notifications.
 
 The connection monitor only detects an address that has not answered for ten minutes; it does not verify credentials
 or restricted permissions. The archive indicator reads persisted daily outcomes: its last successful whole daily check, later failures, missing branch/month reads and failed comparison-page writes. A successful daily check can reuse complete reads for seven days; it does not prove every row was fetched again at that time. Until the first daily status exists, a separately labelled individual read is only a fallback. A backup more than one day old, a failed backup, an archive success over 36 hours old and an unreadable archive each show a warning or next action. See [KNOWN-LIMITS.md](KNOWN-LIMITS.md).

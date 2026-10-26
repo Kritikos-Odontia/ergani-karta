@@ -37,8 +37,9 @@ export function calendarPage(db: StampStore, branches: readonly { code: string; 
       WHERE day BETWEEN ? AND ? ORDER BY day DESC, c.id DESC`).all(`${year}-01-01`, `${year}-12-31`);
     const closed = db.prepare('SELECT * FROM quiet_days WHERE day BETWEEN ? AND ? ORDER BY day DESC, id DESC').all(`${year}-01-01`, `${year}-12-31`);
     return { body: page('Ημερολόγιο υπενθυμίσεων', html`${message}
-${note('warn', 'Μόνο υπενθυμίσεις: το ημερολόγιο δεν δηλώνει ωράριο ή άδεια στην ΕΡΓΑΝΗ. Οι δηλώσεις μένουν στον λογιστή.')}
+${note('warn', 'Το ημερολόγιο δεν δηλώνει ωράριο ή άδεια στην ΕΡΓΑΝΗ. Οι δηλώσεις μένουν στον λογιστή.')}
 <p>Η άδεια σταματά την υπενθύμιση ΕΝΑΡΞΗΣ μόνο για τον εργαζόμενο. Οι αλλαγμένες ώρες αντικαθιστούν το παλιό ωράριο μόνο στο παράρτημα που διαλέγετε, ακόμη κι αν εκεί δεν διαβάζεται ωράριο. Οι ειδοποιήσεις για κάρτες που δεν στάλθηκαν και για πραγματική ανοικτή ΕΝΑΡΞΗ συνεχίζονται.</p>
+<p>Για νυχτερινή βάρδια, π.χ. 22:00-08:00, η ΛΗΞΗ κρατά την ημέρα της ανοικτής ΕΝΑΡΞΗΣ έως και την καταχωρισμένη ώρα λήξης. Ισχύουν οι ώρες της ημέρας και του παραρτήματος της ΕΝΑΡΞΗΣ, ακόμη κι αν φύγετε από άλλο παράρτημα. Χωρίς ώρες που καλύπτουν τη ΛΗΞΗ, η προηγούμενη ημέρα αναγνωρίζεται μόνο πριν από τις 06:00.</p>
 <form method="post" action="/calendar"><fieldset><legend>Άδεια ή αλλαγή ωρών</legend>${csrfField(csrf)}
 <label for="employee">Εργαζόμενος</label><select id="employee" name="employee">${people.map((p) => html`<option value="${p.id}">${p.displayName}</option>`)}</select>
 <label for="from">Από</label><input type="date" id="from" name="from" value="${today}" required>
