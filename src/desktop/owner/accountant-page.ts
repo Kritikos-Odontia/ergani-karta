@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: EUPL-1.2
-import { accountantPeriod, writeAccountantExport } from '../../export/accountant.js';
+import { accountantPeriod, writeAccountantExport } from '../../accountant/export.js';
 import { athensTime } from '../../stamp/athens.js';
 import type { StampStore } from '../../stamp/store.js';
 import type { DesktopPaths } from '../paths.js';

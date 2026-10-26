@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readdirSync, readFileSync, rmSyn
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { accountantFiles, writeAccountantExport } from '../src/export/accountant.js';
+import { accountantFiles, writeAccountantExport } from '../src/accountant/export.js';
 import { afterEach, expect, it } from 'vitest';
 import { createOwnerServer } from '../src/desktop/owner/server.js';
 import { hashPassword } from '../src/desktop/owner/auth.js';

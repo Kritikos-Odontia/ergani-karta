@@ -2,7 +2,7 @@
 import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { assertOutsideCodeFolders } from '../code-folders.js';
-import { daysBetween, daysOfMonth } from './model.js';
+import { daysBetween, daysOfMonth } from '../export/model.js';
 import { zipFiles } from './zip.js';
 import { daysRead, heldStamps, openRecordStoreForReading, recordEmployer, type RecordStore } from '../records/store.js';
 import { rowToPunch } from '../stamp/capture.js';
