@@ -1,6 +1,6 @@
 {
   "name": "ergani-karta",
-  "version": "0.1.0",
+  "version": "0.1.5",
   "private": true,
   "type": "module",
   "description": "Ψηφιακή κάρτα εργασίας — staff stamp their own ΕΝΑΡΞΗ/ΛΗΞΗ, filed to ΕΡΓΑΝΗ ΙΙ, plus the five-year monthly archive. Software an employer runs itself.",
