@@ -12,6 +12,7 @@ import { withoutAfm } from './notify.js';
 import { decide, openPunches, punchById, stateOfPunch, type CardState, type Problem } from './outbox.js';
 import { APP_CSS, APP_JS, notEnrolledPage, PAGE_HTML } from './page.js';
 import { checkPin, chooseOwnPin, personById, stampingStaff, type PinCheck, type VerifiedPerson } from './staff.js';
+import { branchRetired } from './branch-status.js';
 import type { StampStore } from './store.js';
 
 /**
@@ -270,6 +271,11 @@ export function createStampServer(options: StampServerOptions): Server {
 
     const seen = deviceOf(req);
     const device = seen?.device;
+    if (device !== undefined && branchRetired(db, device.branch)) {
+      const text = 'Το παράρτημα έχει αποσυρθεί και δεν δέχεται νέες κάρτες. Ενημερώστε τον εργοδότη.';
+      if (path.startsWith('/api/')) return sendJson(res, 403, { error: 'retired', text });
+      return send(res, 403, notEnrolledPage(text), 'text/html; charset=utf-8');
+    }
     if (seen !== undefined && now() - (cookieSent.get(seen.device.id) ?? -Infinity) >= COOKIE_REFRESH_MS) {
       cookieSent.set(seen.device.id, now());
       res.setHeader('set-cookie', cookieFor(seen.token));

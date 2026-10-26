@@ -5,6 +5,7 @@ import { branchHeading, loadEverything } from './config.js';
 import { filingClient } from './deadline.js';
 import { namelessSender, ntfySender, type PushSender } from './notify.js';
 import { Outbox } from './outbox.js';
+import { branchRetired } from './branch-status.js';
 import { ReachWatch } from './reach.js';
 import { HEALTHY_PASS_MS, createStampServer } from './server.js';
 import { StoreLock } from './store-lock.js';
@@ -43,10 +44,10 @@ export async function runStampService(
 
   const clients = new Map(ergani.branches.map((config) => [config.branchCode, filingClient(config, now)] as const));
   const outbox = new Outbox({ db, clients, employerAfm: ergani.employerAfm, now, log });
-  const readsSchedule = (code: string) => stamp.branches.find((b) => b.code === code)?.scheduleFromErgani === true;
+  const readsSchedule = (code: string) => !branchRetired(db, code) && stamp.branches.find((b) => b.code === code)?.scheduleFromErgani === true;
   const alarms = new Alarms({
     db,
-    branches: stamp.branches.map((b) => ({ code: b.code, label: b.label, fromSchedule: b.scheduleFromErgani })),
+    branches: stamp.branches.filter((b) => !branchRetired(db, b.code)).map((b) => ({ code: b.code, label: b.label, fromSchedule: b.scheduleFromErgani })),
     readers: new Map([...clients].filter(([code]) => readsSchedule(code))),
     // The employer's own server (pushes with names), or the easy mode (nameless, ntfy.sh), or the desktop program's
     // own choice (`pushes`, its «Ειδοποιήσεις» page) — in that order.
@@ -128,9 +129,9 @@ export async function runStampService(
       if (relisten !== undefined) clearTimeout(relisten);
       if (beating !== undefined) clearInterval(beating);
       reach.stop();
-      server.close();
+      const closed = new Promise<void>((resolve) => server.close(() => resolve()));
       try {
-        await Promise.all([outbox.stop(), alarms.stop()]);
+        await Promise.all([outbox.stop(), alarms.stop(), closed]);
       } finally {
         db.close();
         lock.release();

@@ -16,6 +16,7 @@ import { ownerPages } from './owner/pages.js';
 import { openInBrowser } from './open.js';
 import { createOwnerServer, type OwnerPage } from './owner/server.js';
 import { dataDir, desktopPaths, ownerPort, type DesktopPaths } from './paths.js';
+import { ensureConfiguredBranches } from './settings-store.js';
 import { serviceEnv } from './settings-file.js';
 import { readDesktopState, writeDesktopState } from './state.js';
 import { Updater } from '../update/updater.js';
@@ -87,7 +88,12 @@ export async function runDesktop(argv: readonly string[], outside: NodeJS.Proces
     runArchive([], env, (line) => log(`archive: ${line}`)).catch((error: unknown) =>
       log(`archive stopped — ${error instanceof Error ? error.message : String(error)}`),
     );
-    const running = stamping;
+    const reloadSettings = async () => {
+      // One outbox at a time: finish its active send, release its lock, then use the new logins and headings.
+      await stamping?.stop();
+      Object.assign(env, serviceEnv(paths, outside));
+      stamping = await runStampService(env, { onSignals: false, pushes, log: (line) => log(`stamp: ${line}`) });
+    };
     if (launched) {
       updater = new Updater({
         paths,
@@ -97,13 +103,13 @@ export async function runDesktop(argv: readonly string[], outside: NodeJS.Proces
         quiet: (t, sinceMs) => quietForUpdate(paths, t, sinceMs),
         stopServices: async () => {
           server.close();
-          await running.stop();
+          await stamping?.stop();
         },
         exit: (code) => process.exit(code),
       });
       updater.start();
     }
-    pages = ownerPages({ paths, env, now, log, erganiSilentSince: (t) => running.silentSinceMs(t), staffPageProblem: () => running.pageProblem(), updater, openFolders: !values['no-open'] });
+    pages = ownerPages({ paths, env, now, log, reloadSettings, erganiSilentSince: (t) => stamping?.silentSinceMs(t), staffPageProblem: () => stamping?.pageProblem(), updater, openFolders: !values['no-open'] });
     // The daily backup: looked at every hour, run when a day has passed since the last good one (backup.ts).
     setInterval(() => {
       const state = readDesktopState(paths.desktop);
@@ -220,6 +226,7 @@ export function ensureStores(paths: DesktopPaths, env: NodeJS.ProcessEnv, nowIso
   if (established) {
     const missing = [paths.stampDb, paths.recordsDb].filter((store) => !existsSync(store));
     if (missing.length > 0) throw new StoreMissing(missing);
+    ensureConfiguredBranches(paths.stampDb, env, nowIso);
     return;
   }
   const ergani = loadEmployerConfig(env);
@@ -233,6 +240,7 @@ export function ensureStores(paths: DesktopPaths, env: NodeJS.ProcessEnv, nowIso
       nowIso,
     ).close();
   }
+  ensureConfiguredBranches(paths.stampDb, env, nowIso);
   if (!existsSync(paths.recordsDb)) {
     mkdirSync(dirname(paths.recordsDb), { recursive: true, mode: 0o700 });
     const db = openRecordStore(paths.recordsDb);

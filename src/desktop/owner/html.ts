@@ -39,6 +39,7 @@ export const NAV: ReadonlyArray<readonly [string, string]> = [
   ['/backup', 'Αντίγραφα'],
   ['/alerts', 'Ειδοποιήσεις'],
   ['/updates', 'Ενημερώσεις'],
+  ['/settings', 'Ρυθμίσεις'],
 ];
 
 export function page(title: string, body: Html, options: { nav?: boolean; csrf?: string } = {}): string {

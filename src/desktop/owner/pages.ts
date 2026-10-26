@@ -28,6 +28,7 @@ import { calendarPage } from './calendar-page.js';
 import type { OwnerPage } from './server.js';
 import { missingProofsPanel, ownerOverview } from './overview.js';
 import { readOverviewMaintenance } from './overview-maintenance.js';
+import { settingsPage } from './settings.js';
 
 /**
  * THE OWNER'S PAGES — what `ergani admin` does, as pages, on this computer's own store. ⛔ None stamps a card: the
@@ -54,6 +55,8 @@ export interface PagesContext {
   updater?: Updater | undefined;
   /** Open an employee's records folder with the system's file browser (not under `--no-open`). */
   openFolders?: boolean;
+  /** Apply changed settings after the current send finishes. */
+  reloadSettings?: () => Promise<void>;
 }
 
 const when = (iso: string) => new Date(iso).toLocaleString('el-GR', { timeZone: 'Europe/Athens' });
@@ -74,13 +77,13 @@ export function installerNote(u: Updater): Html | undefined {
 }
 
 export function ownerPages(c: PagesContext): ReadonlyMap<string, OwnerPage> {
-  const ergani = loadEmployerConfig(c.env);
-  const settings = loadStampSettings(c.env);
-  const codes = ergani.branches.map((b) => b.branchCode);
+  let ergani = loadEmployerConfig(c.env);
+  let settings = loadStampSettings(c.env);
+  let codes = ergani.branches.map((b) => b.branchCode);
   const db: StampStore = openStampStore(c.paths.stampDb, { name: settings.instance, realm: ergani.erganiRealm, employerAfm: ergani.employerAfm }, codes);
   const heading = (code: string) => branchHeading(settings, code);
-  const many = codes.length > 1;
-  const pageAddress = `http://${settings.listenHost}:${settings.port}`;
+  let many = codes.length > 1;
+  let pageAddress = `http://${settings.listenHost}:${settings.port}`;
   const fail = (error: unknown) => note('bad', `Δεν έγινε: ${error instanceof Error ? error.message : String(error)}`);
   const done = (title: string, csrf: string, body: Html) => ({ body: page(title, body, { csrf }) });
 
@@ -433,7 +436,8 @@ ${note('ok', 'Οι ειδοποιήσεις είναι ανοιχτές — χω
 διαβάσει· γι' αυτό είναι μακρύ και τυχαίο, και «Νέο θέμα» το αλλάζει. Τα ονόματα μένουν στη σελίδα του ιατρείου.</p>`);
   };
 
-  return new Map<string, OwnerPage>([
+  const pages = new Map<string, OwnerPage>([
+    ['/settings', settingsPage(c, db)],
     ['/', home],
     ['/alerts', alerts],
     ['/updates', updates],
@@ -447,5 +451,14 @@ ${note('ok', 'Οι ειδοποιήσεις είναι ανοιχτές — χω
     ['/check', check],
     ['/backup', backup],
   ]);
+  // Keep the same store connection; headings and CLI actions use the settings currently serving the staff.
+  return new Map([...pages].map(([path, handler]) => [path, (request) => {
+    ergani = loadEmployerConfig(c.env);
+    settings = loadStampSettings(c.env);
+    codes = ergani.branches.map((b) => b.branchCode);
+    many = codes.length > 1;
+    pageAddress = `http://${settings.listenHost}:${settings.port}`;
+    return handler(request);
+  }]));
 }
 

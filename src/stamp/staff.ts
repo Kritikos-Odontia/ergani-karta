@@ -230,6 +230,9 @@ export function renamePerson(
   const surname = names.surname === undefined ? person.surname : registerName(names.surname);
   const firstName = names.firstName === undefined ? person.firstName : registerName(names.firstName);
   const displayName = names.displayName?.trim() ?? person.displayName;
+  if (surname === '' || surname.length > 50) throw new Error('Το επώνυμο χρειάζεται 1–50 χαρακτήρες.');
+  if (firstName === '' || firstName.length > 30) throw new Error('Το όνομα χρειάζεται 1–30 χαρακτήρες.');
+  if (displayName === '' || displayName.length > 80) throw new Error('Το όνομα στη σελίδα χρειάζεται 1–80 χαρακτήρες.');
   inTransaction(db, () => {
     db.prepare('UPDATE employees SET surname = ?, first_name = ?, display_name = ? WHERE id = ?').run(
       surname,
@@ -237,7 +240,7 @@ export function renamePerson(
       displayName,
       person.id,
     );
-    logEvent(db, person.id, 'renamed', `${person.surname} ${person.firstName} → ${surname} ${firstName}`, by, nowMs);
+    logEvent(db, person.id, 'renamed', `${person.surname} ${person.firstName} (${person.displayName}) → ${surname} ${firstName} (${displayName})`, by, nowMs);
   });
 }
 
