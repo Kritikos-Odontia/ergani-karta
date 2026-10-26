@@ -110,18 +110,27 @@ it('rechecks fresh stamps captured while a late send is in flight before continu
   expect(t.fake.filed.slice(0, 2).map((f) => f.detail['f_afm'])).toEqual([AFM.alfa, AFM.vita]);
 });
 
-it('across midnight and branches, promotes the fresh ΛΗΞΗ\'s due ΕΝΑΡΞΗ before it, ahead of unrelated backlog', async () => {
+it('while backlog sending crosses midnight, promotes the new ΛΗΞΗ\'s due ΕΝΑΡΞΗ across branches', async () => {
   const t = await boot();
-  clock = athensInstant('2026-10-27', '00:05');
+  clock = athensInstant('2026-10-26', '23:58');
   t.backlog();
   const start = capturePunch(t.db, t.people[1]!, ENARXI, t.device, athensInstant('2026-10-26', '23:20'));
   t.approve(start);
-  const end = capturePunch(t.db, t.people[1]!, LIXI, t.annex, clock);
-  t.afterSend(() => { clock += 3 * 60_000; });
-  await t.makeOutbox().pass();
-  expect(end.referenceDate).toBe('2026-10-26');
-  expect(t.fake.filed.slice(0, 2).map((f) => [f.detail['f_afm'], f.detail['f_type']])).toEqual([[AFM.vita, '0'], [AFM.vita, '1']]);
-  expect(stateOfPunch(t.db, end, clock)).toMatchObject({ kind: 'filed', late: false });
+  let end: Punch | undefined;
+  const outbox = t.makeOutbox();
+  t.afterSend(() => {
+    clock += 3 * 60_000;
+    if (end === undefined) {
+      // The first unrelated late send spans 23:58–00:01. This new clock-out must get its own window.
+      end = capturePunch(t.db, t.people[1]!, LIXI, t.annex, clock);
+      outbox.wake();
+    }
+  });
+  await outbox.pass();
+  expect(end!.referenceDate).toBe('2026-10-26');
+  expect(t.fake.filed.slice(0, 3).map((f) => [f.detail['f_afm'], f.detail['f_type']]))
+    .toEqual([[AFM.alfa, '0'], [AFM.vita, '0'], [AFM.vita, '1']]);
+  expect(stateOfPunch(t.db, end!, clock)).toMatchObject({ kind: 'filed', late: false });
 });
 
 it('a failed due ΕΝΑΡΞΗ never holds back its fresh ΛΗΞΗ for a late retry', async () => {
