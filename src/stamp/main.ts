@@ -108,7 +108,19 @@ export async function runStampService(
     pageProblem = code;
     relisten = setTimeout(listen, retryMs);
   });
-  listen();
+  // A settings reload waits for this first attempt before it reports success. Returning before `listening`
+  // lets the owner's next request reach a page that has not opened yet (especially on Linux).
+  // An unavailable address still returns with pageProblem and keeps its normal retry loop.
+  await new Promise<void>((resolve) => {
+    const attempted = () => {
+      server.off('listening', attempted);
+      server.off('error', attempted);
+      resolve();
+    };
+    server.once('listening', attempted);
+    server.once('error', attempted);
+    listen();
+  });
 
   // The monitor hears «up» each minute only while the outbox is passing; a stuck or dead service goes silent.
   const beat = stamp.heartbeatUrl === undefined ? undefined : heartbeatSender(stamp.heartbeatUrl);

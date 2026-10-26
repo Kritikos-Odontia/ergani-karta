@@ -23,6 +23,28 @@ afterEach(async () => {
 });
 
 describe('the stamping service’s page', () => {
+  it('finishes its first page bind before returning, so a settings reload does not announce an unopened page', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'karta-service-ready-'));
+    cleanup.push(() => rmSync(root, { recursive: true, force: true }));
+    const holder = createServer();
+    await new Promise<void>((resolve) => holder.listen(0, '127.0.0.1', resolve));
+    const port = (holder.address() as { port: number }).port;
+    await new Promise<void>((resolve) => holder.close(() => resolve()));
+    const env: NodeJS.ProcessEnv = {
+      STAMP_INSTANCE: 'fixture', STAMP_DB: join(root, 'stamp.sqlite'), STAMP_PORT: String(port),
+      STAMP_LISTEN_HOST: '127.0.0.1', ERGANI_EMPLOYER_AFM: AFM.employer, ERGANI_USERTYPE: '02',
+      ERGANI_BRANCH_0_USERNAME: 'fixture01', ERGANI_BRANCH_0_PASSWORD: 'Fixture.p1',
+      ERGANI_BASE_URL: 'http://127.0.0.1:9/WebservicesAPI/api', STAMP_BRANCH_0_SCHEDULE: 'none',
+    };
+    const instance = { name: 'fixture', realm: loadEmployerConfig(env).erganiRealm, employerAfm: AFM.employer };
+    initStampStore(env.STAMP_DB!, instance, ['0'], new Date().toISOString()).close();
+    const lines: string[] = [];
+    const service = await runStampService(env, { onSignals: false, log: (line) => lines.push(line) });
+    cleanup.push(() => service.stop());
+    expect(lines).toContain(`page on 127.0.0.1:${port}`);
+    expect((await fetch(`http://127.0.0.1:${port}/health`)).status).toBeLessThan(500);
+  });
+
   it('reads schedules only for active branches that enable them', async () => {
     const root = mkdtempSync(join(tmpdir(), 'karta-service-schedules-'));
     cleanup.push(() => rmSync(root, { recursive: true, force: true }));
@@ -85,7 +107,8 @@ describe('the stamping service’s page', () => {
 
     const service = await runStampService(env, { onSignals: false, listenRetryMs: 100 });
     cleanup.push(() => service.stop());
-    await new Promise((r) => setTimeout(r, 300)); // a few tries, all refused
+    expect(service.pageProblem()).toBe('EADDRINUSE'); // the first attempt has finished before returning
+    await new Promise((r) => setTimeout(r, 300)); // a few retries, all refused
     expect(service.pageProblem()).toBe('EADDRINUSE');
 
     await new Promise<void>((resolve) => holder.close(() => resolve()));
