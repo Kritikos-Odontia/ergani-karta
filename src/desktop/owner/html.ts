@@ -77,6 +77,7 @@ legend { font-weight: 600; padding: 0 6px; }
 label { display: block; margin: 10px 0 4px; font-weight: 500; }
 input[type=text], input[type=password], input[type=email], input[type=number], input[type=month], input[type=date], select {
   width: 100%; max-width: 420px; padding: 8px 10px; font: inherit; border: 1px solid var(--line); border-radius: 6px; }
+.settings label > input, .settings label > select { display: block; margin-top: 4px; }
 .check label { display: inline; font-weight: 400; }
 button { font: inherit; padding: 8px 16px; border-radius: 6px; border: 1px solid var(--brand); background: var(--brand); color: #fff; cursor: pointer; }
 button.secondary { background: #fff; color: var(--brand); }

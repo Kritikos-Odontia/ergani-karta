@@ -165,7 +165,7 @@ export function settingsPage(c: PagesContext, db: StampStore): OwnerPage {
 <label>Νέος κωδικός ΕΡΓΑΝΗ (8–12 χαρακτήρες)<input name="password" type="password" autocomplete="new-password" required minlength="8" maxlength="12"></label>
 <label>Ξανά ο νέος κωδικός ΕΡΓΑΝΗ<input name="password2" type="password" autocomplete="new-password" required></label>
 <p class="hint">Μόνο Χρήστης Παραρτήματος ${branch}, με δικαίωμα μόνο στη δήλωση κάρτας μέσω API. <a href="/odigos">Οδηγίες</a>. Μετά την αποθήκευση γίνεται έλεγχος μόνο ανάγνωσης.</p>`;
-    const actionForm = (todo: string, content: Html, branch = '') => html`<form method="post" action="/settings">${csrfField(csrf)}<input type="hidden" name="do" value="${todo}"><input type="hidden" name="branch" value="${branch}">${content}<p><button>Αποθήκευση</button></p></form>`;
+    const actionForm = (todo: string, content: Html, branch = '') => html`<form class="settings" method="post" action="/settings">${csrfField(csrf)}<input type="hidden" name="do" value="${todo}"><input type="hidden" name="branch" value="${branch}">${content}<p><button>Αποθήκευση</button></p></form>`;
     return { body: page('Ρυθμίσεις', html`${message}
 <p>Οι αλλαγές εφαρμόζονται χωρίς επανεκκίνηση του υπολογιστή. Η σελίδα των εργαζομένων ξανανοίγει προσωρινά με τις νέες ρυθμίσεις· ολοκληρώνεται πρώτα η αποστολή που βρίσκεται σε εξέλιξη.</p>
 <fieldset><legend>Όνομα ιατρείου</legend>${actionForm('practice', html`<label>Όνομα στη σελίδα<input name="label" type="text" value="${current.label}" required maxlength="120"></label>`)}</fieldset>
@@ -177,8 +177,8 @@ ${current.branches.map((b) => html`<fieldset><legend>Παράρτημα ${b.code
 ${branchRetired(db, b.code) ? note('warn', 'Έχει αποσυρθεί. Το ιστορικό και η σύνδεση διατηρούνται· δεν δέχεται νέες κάρτες.') : html``}
 ${actionForm('branch-name', html`<label>Όνομα παραρτήματος<input name="label" type="text" value="${b.label || current.label}" required maxlength="40"></label>`, b.code)}
 <details><summary>Αλλαγή σύνδεσης ΕΡΓΑΝΗ</summary>${actionForm('connection', connection(b.code), b.code)}</details>
-${branchRetired(db, b.code) ? html`` : html`<form method="post" action="/settings">${csrfField(csrf)}<input name="do" type="hidden" value="retire-branch"><input name="branch" type="hidden" value="${b.code}"><p>Απόσυρση μόνο όταν δεν εργάζεται πια κανείς εδώ. Σταματά τις νέες κάρτες, διατηρεί το ιστορικό και τις εκκρεμότητες.</p><p><button class="secondary">Απόσυρση παραρτήματος</button></p></form>`}</fieldset>`)}
-<fieldset><legend>Νέο παράρτημα</legend><form method="post" action="/settings">${csrfField(csrf)}<input name="do" type="hidden" value="add-branch">
+${branchRetired(db, b.code) ? html`` : html`<form class="settings" method="post" action="/settings">${csrfField(csrf)}<input name="do" type="hidden" value="retire-branch"><input name="branch" type="hidden" value="${b.code}"><p>Απόσυρση μόνο όταν δεν εργάζεται πια κανείς εδώ. Σταματά τις νέες κάρτες, διατηρεί το ιστορικό και τις εκκρεμότητες.</p><p><button class="secondary">Απόσυρση παραρτήματος</button></p></form>`}</fieldset>`)}
+<fieldset><legend>Νέο παράρτημα</legend><form class="settings" method="post" action="/settings">${csrfField(csrf)}<input name="do" type="hidden" value="add-branch">
 <label>Αριθμός όπως στην ΕΡΓΑΝΗ<input name="branch" type="text" inputmode="numeric" required></label><label>Όνομα παραρτήματος<input name="label" type="text" required maxlength="40"></label>
 ${connection('του νέου παραρτήματος')}<label>Ανάγνωση δηλωμένου ωραρίου<select name="schedule"><option value="ergani">Από την ΕΡΓΑΝΗ</option><option value="none">Χωρίς σταθερό δηλωμένο ωράριο</option></select></label><p><button>Προσθήκη</button></p></form></fieldset>`, { csrf }) };
   };
