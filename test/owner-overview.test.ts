@@ -217,6 +217,19 @@ describe('the owner’s first screen', () => {
     expect(down).toContain('href="/check"');
   });
 
+  it('requires both immediate outage notifications while cards can still arrive within fifteen minutes', async () => {
+    const at = athensInstant('2026-10-26', '10:00');
+    const { db, render, setSilent } = installation(at + 12 * 60_000);
+    capturePunch(db, await verified(db), ENARXI, deviceAt(db), at);
+    setSilent(at);
+    const home = await render();
+    const connection = home.match(/<section aria-labelledby="connection">([\s\S]*?)<\/section>/)![1]!;
+    expect(connection).toContain('Ειδοποιήστε ΑΜΕΣΑ την Επιθεώρηση Εργασίας');
+    expect(connection).toContain('μόλις το πρόβλημα εμποδίσει την αποστολή και ΞΑΝΑ μόλις τελειώσει');
+    expect(connection).toContain('ακόμη κι αν οι κάρτες σταλούν μέσα σε 15 λεπτά');
+    expect(connection).not.toContain('Αν δεν σταλούν');
+  });
+
   it('reads backup changes on each refresh and gives a failed or old backup a repair action', async () => {
     const { paths, render } = installation();
     const state = readDesktopState(paths.desktop)!;

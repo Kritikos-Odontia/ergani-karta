@@ -22,4 +22,6 @@ A newer failure does not hide the last success. Months that fell outside ΕΡΓ�
 
 Opening Home does not file a card, choose a reason or make a backup. Follow the relevant indicator's link. PDF retrieval retries automatically; the list says when retrieval stopped because the filing is too old (183-day limit). Tell the accountant then.
 
+Notify the Labour Inspectorate immediately when a condition prevents transmission, and again as soon as it ends, even if later retries deliver every card within fifteen minutes. Selecting a late-filing reason does not replace these two notifications.
+
 Do not repeat a recorded card because its response or PDF is pending. Use [CardScanner](daily.md) when the page cannot capture a card. For a card that missed its window see [failures and the accountant](failures.md). Detailed reference: [OWNER-OVERVIEW.md](../../OWNER-OVERVIEW.md).
