@@ -13,7 +13,7 @@
   διορθώνετε από την ίδια σελίδα.
 - **Κωδικός εργοδότη:** γράψτε τον παλιό και δύο φορές τον νέο (τουλάχιστον 10 χαρακτήρες). Με την αλλαγή κλείνουν
   όλες οι υπάρχουσες συνδέσεις εργοδότη· συνδεθείτε ξανά με τον νέο. Πέντε λάθος παλιοί κωδικοί εμποδίζουν άλλες
-  δοκιμές αλλαγής για 10 λεπτά. Ο κωδικός κρατιέται μόνο ως προστατευμένο αποτύπωμα, όπως στην πρώτη ρύθμιση.
+  δοκιμές αλλαγής για 10 λεπτά. Ο κωδικός κρατιέται μόνο ως προστατευμένο αποτύπωμα, όπως στην πρώτη ρύθμιση. Τα παλιότερα αντίγραφα ασφαλείας εξακολουθούν να ανοίγουν με τον κωδικό που ίσχυε όταν γράφτηκαν· κρατήστε τον στον διαχειριστή κωδικών σας ([NEW-COMPUTER.md](NEW-COMPUTER.md)).
 - **Όνομα ιατρείου ή εργαζομένου:** διορθώστε τα πεδία και αποθηκεύστε. Το αρχικό όνομα και η διόρθωση κρατιούνται
   ως ξεχωριστά γεγονότα. Οι παλιές κάρτες κρατούν ακριβώς το όνομα που είχαν όταν χτυπήθηκαν — ακόμη κι αν δεν έχουν
   σταλεί ακόμη. Ο ΑΦΜ δεν αλλάζει. Η διόρθωση εδώ δεν αλλάζει το μητρώο της ΕΡΓΑΝΗ· αν εκεί υπάρχει λάθος, ενημερώστε
@@ -51,7 +51,7 @@ card on anyone's behalf.
   the branch identity, restricted permissions or successful filing: verify the permissions yourself in ΕΡΓΑΝΗ using
   [ERGANI-USER.md](ERGANI-USER.md). Failed new credentials stay saved and can be corrected on the same page.
 - Change the owner password by supplying the old one and entering the new one twice (at least 10 characters).
-  Existing owner sessions are signed out. Five wrong old-password attempts lock further changes for 10 minutes.
+  Existing owner sessions are signed out. Five wrong old-password attempts lock further changes for 10 minutes. Older backups still need the owner password used when they were taken; retain it in your password manager ([NEW-COMPUTER.md](NEW-COMPUTER.md)).
 - Correct the practice or employee name. The original and correction remain recorded as separate facts; old cards,
   including cards still waiting to be sent, retain their captured names. An employee's tax identifier cannot change.
   These corrections do not change the ΕΡΓΑΝΗ register; contact the accountant if that needs correcting.

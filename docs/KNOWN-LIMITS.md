@@ -2,14 +2,7 @@
 
 What is known and not fixed, and why. Stated once, as fact. An entry is removed when it is fixed.
 
-## The owner overview currently reads individual archive pulls
-
-The desktop Home page reads the latest backup attempt from `desktop.json` and the monthly pulls from the local record.
-Until the readiness work's persisted daily status is joined, its last complete archive read proves one branch/month,
-not a successful whole daily archive run or comparison-page writes. Failed or absent latest reads in the current
-one-to-five-month archive window are listed by month and branch. A newer failed read does not hide the last complete
-one. Failures before a pull is recorded, and failed comparison-page writes, cannot be inferred from these pulls; the
-screen says so. The reader is isolated in `src/desktop/owner/overview-maintenance.ts` for that integration.
+## The owner overview is a local snapshot
 
 The overview is a snapshot, refreshed by reloading the page. Its connection monitor detects ten minutes without an
 HTTP answer, including the initial observation period after startup; absence of that alarm is not proof of a working
@@ -23,6 +16,12 @@ reads one long one from earliest ΕΝΑΡΞΗ to latest ΛΗΞΗ is not settled 
 older paragraph disagree). Until it is measured, rule 3's bound stands (docs/RULES.md), and a forgotten midday ΛΗΞΗ is
 exactly the missed card that could turn a split day into one long one — which is why the «forgot to stamp» alarms check
 each declared interval on its own.
+
+The read-only review of already-held records on 26 October 2026 found no split-shift person-day. No new filing or ministry call was made. Fabricated split-day tests exercise the local sending bound; they do not measure the ministry's merge.
+
+## Overnight ministry read-back remains unconfirmed
+
+The same stored-record review found no overnight exit. The program preserves a post-midnight exit's original working day, including across branches, and fabricated tests cover it. No observed overnight monthly answer confirms the ministry's date, time or overnight-flag shape yet; an unrecognised answer is refused, never recorded as an empty day.
 
 ## Without a calendar entry, who is due today comes from last month's schedule
 
@@ -68,7 +67,7 @@ see it. A deactivated or exempt person's record remains available through the ow
 
 What ΕΡΓΑΝΗ answers was measured on real accounts (the forms list, the read services, the schedule rows, the proof
 PDF's shape). No `EX_BASE_07` stamp row with hours has been seen yet in the shapes this reader expects for every
-employer: an answer in another shape is refused and shown — never read as «no stamp».
+employer: an answer in another shape is refused and shown — never read as «no stamp». The 26 October read-only stored-record review found completed monthly pulls with zero stamp rows, while local October cards held filing receipts and proof PDFs. October is not readable until November: those earlier empty reads do not verify a nonempty card answer, split shifts, or overnight shifts. The stored successful receipts confirmed HTTP 200 and string fields `id`, `protocol`, `submitDate` (date shape `DD/MM/YYYY HH:mm`); stored proof PDFs had the PDF header and matching SHA-256. These shapes are exercised with fabricated data in the client and proof tests. No new ministry call or artificial filing was used to close this gap.
 
 ## Retired branches keep their login; reactivation has no screen
 
@@ -141,3 +140,21 @@ and keeps those two sources separate; it does not automatically match them or de
 only, without refreshing ΕΡΓΑΝΗ. A day without a successful saved read is unknown; a card marked covered elsewhere
 still needs that coverage checked. Proof PDFs not yet obtained are identified rather than invented. The ZIP holds
 staff identifiers and hours and is not encrypted. Large periods use memory; prefer one month at a time.
+
+## Recovery is a snapshot, with an explicit sending hold
+
+Desktop backups now include both record files, exports and encrypted settings/owner access. Recovery needs the owner password used at the time of that backup. The local settings file still uses the program's existing owner-only file protection; encryption here protects the recovery settings on the backup drive. The SQLite files and exports themselves remain unencrypted and need private storage.
+
+Older backups without `recovery.json` hold records only; they cannot use the guided complete recovery. Keep them, and take a new complete backup while the original computer is available. A forgotten owner password cannot decrypt the recovery settings; the two record files remain readable by a qualified person without that password.
+
+A snapshot cannot recover local cards or proof PDFs written after it. After restoring to an empty data folder, all sending and the staff page remain stopped across restarts until the owner checks old unresolved cards with the accountant and confirms the old computer has stopped. Those old cards are recorded as covered or left to the accountant, not automatically re-sent. A very recent card, or an active late-send decision, must first reach the end of its existing sending window before it accepts that decision. Staff use CardScanner during this check. Do not restore just the two files over an active installation: that bypasses the hold. New-computer steps: [NEW-COMPUTER.md](NEW-COMPUTER.md).
+
+The desktop recovery package is not a Docker backup system or a disk image. Docker operators must back up both volumes and encrypt their settings with their own backup tool, then reconcile pending cards before restarting the sender.
+
+## A connection check cannot prove the restricted permissions
+
+The read-only connection check proves sign-in, an offered card form and (where enabled) one schedule read. It does not prove filing rights, card-only scope, API-only access or the correct branch. The owner checks these in the ministry portal and explicitly records that check on the desktop connection page. Local settings changes ask for a new confirmation; portal-only changes cannot be detected automatically. No artificial card is filed to test permissions.
+
+## Archive status is local, and a page failure remains a failure
+
+The desktop home page shows the last successful daily archive check, the latest failure or zero-stamp warning, incomplete month/branch pairs and missing comparison pages. Older never-read months stay listed even after the ministry's readable window closes; the program cannot fetch them then. A good check over 36 hours old is flagged. The last-success time describes the daily check, which may reuse a complete pull for seven days; it is not the time every ministry row was read again. An export-page failure can coexist with complete stored records and is shown separately. Operational status is rebuilt after recovery; it is not a substitute for the record stores.

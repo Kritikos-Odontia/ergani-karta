@@ -6,6 +6,7 @@ import { settingsFile } from '../../setup/settings.js';
 import { newEasyTopic } from '../../stamp/notify.js';
 import type { DesktopPaths } from '../paths.js';
 import { readDesktopState, writeDesktopState, type DesktopState } from '../state.js';
+import { restoreBackup } from '../backup.js';
 import { OwnerSessions, hashPassword, sameToken } from './auth.js';
 import { OWNER_CSS, html, note, page, type Html } from './html.js';
 import { privateAddresses, readSetupForm, setupPage, setupProblems, type SetupForm } from './setup-page.js';
@@ -56,6 +57,8 @@ const HEADERS = {
 
 export function createOwnerServer(o: OwnerOptions): Server {
   const sessions = new OwnerSessions(o.now);
+  let restoreFailures = 0;
+  let restoreLockedUntil = 0;
   const todayMonth = () => new Date(o.now()).toISOString().slice(0, 7);
 
   const send = (res: ServerResponse, status: number, body: string, type = 'text/html; charset=utf-8', extra: Record<string, string> = {}) => {
@@ -104,7 +107,20 @@ export function createOwnerServer(o: OwnerOptions): Server {
 
     // ── First run: only the setup answers, until it is saved ────────────────────────────────────────
     const state = readDesktopState(o.paths.desktop);
-    if (state === undefined || !existsSync(o.paths.settings)) {
+    if (state === undefined || (!existsSync(o.paths.settings) && state.recovery === undefined)) {
+      if (url.pathname === '/restore') {
+        if (method === 'GET') return send(res, 200, restorePage());
+        if (o.now() < restoreLockedUntil) return send(res, 429, restorePage(note('bad', 'Πολλοί λάθος κωδικοί. Ξαναδοκιμάστε σε 10 λεπτά.')));
+        try {
+          restoreBackup(o.paths, form.get('folder') ?? '', form.get('password') ?? '', o.now());
+          restoreFailures = 0;
+        } catch {
+          if (++restoreFailures >= 5) { restoreLockedUntil = o.now() + 10 * 60_000; restoreFailures = 0; }
+          return send(res, 400, restorePage(note('bad', 'Δεν έγινε επαναφορά. Ελέγξτε τον κωδικό εργοδότη, το πλήρες αντίγραφο και ότι ο φάκελος δεδομένων είναι άδειος.')));
+        }
+        await o.onSetup();
+        return redirect(res, '/login');
+      }
       if (url.pathname !== '/setup') return redirect(res, '/setup');
       if (method === 'GET') return send(res, 200, setupPage(todayMonth(), privateAddresses()));
       const filled = readSetupForm(form, todayMonth());
@@ -162,6 +178,12 @@ export function createOwnerServer(o: OwnerOptions): Server {
       else res.end();
     });
   });
+}
+
+function restorePage(message: Html = html``): string {
+  return page('Επαναφορά σε νέο υπολογιστή', html`${message}
+<p>Επιλέξτε το πλήρες αντίγραφο <code>karta-…</code>. Χρειάζεται ο κωδικός εργοδότη που είχατε όταν γράφτηκε. Η αποστολή μένει σταματημένη μέχρι τον έλεγχο των παλιών εκκρεμοτήτων.</p>
+<form method="post" action="/restore"><label for="folder">Πλήρης διαδρομή φακέλου αντιγράφου</label><input type="text" id="folder" name="folder"><label for="password">Κωδικός εργοδότη αυτού του αντιγράφου</label><input type="password" id="password" name="password" autocomplete="current-password"><p><button>Επαναφορά</button></p></form><p><a href="/setup">Πίσω στη ρύθμιση</a></p>`, { nav: false });
 }
 
 function loginPage(message: Html = html``): string {
