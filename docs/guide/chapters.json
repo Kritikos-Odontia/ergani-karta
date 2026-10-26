@@ -1,0 +1,151 @@
+{
+  "schema": 1,
+  "locales": [
+    "el",
+    "en"
+  ],
+  "chapters": [
+    {
+      "slug": "index",
+      "title": {
+        "el": "Κάρτα Εργασίας — ο οδηγός σας",
+        "en": "Work Card — your guide"
+      }
+    },
+    {
+      "slug": "requirements",
+      "title": {
+        "el": "Απαιτήσεις και γνωστά όρια",
+        "en": "Requirements and known limits"
+      }
+    },
+    {
+      "slug": "windows",
+      "title": {
+        "el": "Εγκατάσταση σε Windows",
+        "en": "Install on Windows"
+      }
+    },
+    {
+      "slug": "mac",
+      "title": {
+        "el": "Εγκατάσταση σε Mac",
+        "en": "Install on Mac"
+      }
+    },
+    {
+      "slug": "linux",
+      "title": {
+        "el": "Εγκατάσταση σε Linux",
+        "en": "Install on Linux"
+      }
+    },
+    {
+      "slug": "docker",
+      "title": {
+        "el": "Τεχνική εγκατάσταση — Docker",
+        "en": "Technical installation — Docker"
+      }
+    },
+    {
+      "slug": "access",
+      "title": {
+        "el": "Περιορισμένοι χρήστες, PIN και συσκευές",
+        "en": "Restricted users, PINs and devices"
+      }
+    },
+    {
+      "slug": "daily",
+      "title": {
+        "el": "Κάθε μέρα — προσωπικό και CardScanner",
+        "en": "Daily use — staff and CardScanner"
+      }
+    },
+    {
+      "slug": "failures",
+      "title": {
+        "el": "Αποτυχίες αποστολής και ο λογιστής",
+        "en": "Failed submissions and the accountant"
+      }
+    },
+    {
+      "slug": "records",
+      "title": {
+        "el": "Καταγραφές και αποδεικτικά",
+        "en": "Records and receipts"
+      }
+    },
+    {
+      "slug": "backups",
+      "title": {
+        "el": "Αντίγραφα και επαναφορά",
+        "en": "Backups and recovery"
+      }
+    },
+    {
+      "slug": "updates",
+      "title": {
+        "el": "Ενημερώσεις του προγράμματος",
+        "en": "Program updates"
+      }
+    },
+    {
+      "slug": "troubleshooting",
+      "title": {
+        "el": "Αντιμετώπιση προβλημάτων",
+        "en": "Troubleshooting"
+      }
+    },
+    {
+      "slug": "download",
+      "title": {
+        "el": "Λήψη, κώδικας, άδεια και ασφάλεια",
+        "en": "Download, source, licence and security"
+      }
+    }
+  ],
+  "planned": [
+    {
+      "slug": "owner-overview",
+      "title": {
+        "el": "Η καθημερινή εικόνα του εργοδότη",
+        "en": "Owner daily overview"
+      }
+    },
+    {
+      "slug": "settings",
+      "title": {
+        "el": "Ρυθμίσεις και παραρτήματα",
+        "en": "Settings and branches"
+      }
+    },
+    {
+      "slug": "accountant-export",
+      "title": {
+        "el": "Εξαγωγή για τον λογιστή",
+        "en": "Accountant export"
+      }
+    },
+    {
+      "slug": "reminder-calendar",
+      "title": {
+        "el": "Ημερολόγιο υπενθυμίσεων",
+        "en": "Reminder calendar"
+      }
+    },
+    {
+      "slug": "outage-queue",
+      "title": {
+        "el": "Ουρά μετά από διακοπή",
+        "en": "Queue after an outage"
+      }
+    },
+    {
+      "slug": "employee-history",
+      "title": {
+        "el": "Το ιστορικό μου με PIN",
+        "en": "My history with a PIN"
+      }
+    }
+  ]
+}
