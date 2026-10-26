@@ -162,7 +162,9 @@ describe('the owner settings', () => {
     const f = await fixture();
     expect((await f.post({ do: 'add-branch', branch: '1', label: 'Δεύτερο', username: 'fixture02', password: 'Fixture.p2', password2: 'Fixture.p2', schedule: 'none' })).status).toBe(200);
     expect(storeBranches(f.db)).toEqual(['0', '1']);
+    expect(await (await f.get('/calendar')).text()).toContain('<option value="1">Δεύτερο</option>');
     expect((await f.post({ do: 'branch-name', branch: '1', label: 'Παράδειγμα' })).status).toBe(200);
+    expect(await (await f.get('/calendar')).text()).toContain('<option value="1">Παράδειγμα</option>');
     const added = await addPersonForTest(f.db, ALFA, 'fixture', f.now);
     const checked = await checkPin(f.db, added.id, added.oneTimePin!, f.now);
     if (checked.kind !== 'ok') throw new Error('fixture PIN');

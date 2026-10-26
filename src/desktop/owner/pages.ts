@@ -445,7 +445,7 @@ ${note('ok', 'Οι ειδοποιήσεις είναι ανοιχτές — χω
     ['/devices', devices],
     ['/queue', queue],
     ['/days', days],
-    ['/calendar', calendarPage(db, settings.branches, c.now)],
+    ['/calendar', (request) => calendarPage(db, settings.branches, c.now)(request)],
     ['/records', records],
     ['/accountant', accountantPage({ db, paths: c.paths, now: c.now, branchName: heading, openFolders: c.openFolders !== false, log: c.log })],
     ['/check', check],

@@ -20,7 +20,7 @@
   τον λογιστή.
 - **Νέο παράρτημα:** χρησιμοποιήστε τον αριθμό που έχει ήδη στην ΕΡΓΑΝΗ (η έδρα είναι `0`), ένα όνομα και τον δικό
   του περιορισμένο χρήστη. Επιλέξτε αν διαβάζεται το σταθερό δηλωμένο ωράριό του. Γίνεται ο ίδιος έλεγχος σύνδεσης.
-  Μετά εγγράψτε τη συσκευή υποδοχής του από τις **Συσκευές**. Η προσθήκη εδώ δεν ιδρύει παράρτημα στην ΕΡΓΑΝΗ.
+  Το παράρτημα εμφανίζεται αμέσως και στο **Ημερολόγιο**. Μετά εγγράψτε τη συσκευή υποδοχής του από τις **Συσκευές**. Η προσθήκη εδώ δεν ιδρύει παράρτημα στην ΕΡΓΑΝΗ.
 - **Μετονομασία παραρτήματος:** αλλάζει το όνομα που δείχνει η σελίδα, με καταγραφή της διόρθωσης. Ο αριθμός και
   οι παλιές κάρτες διατηρούνται.
 - **Απόσυρση παραρτήματος:** μόνο όταν κανείς δεν εργάζεται πια εκεί. Η σελίδα του παύει να δέχεται νέες κάρτες,
@@ -56,7 +56,8 @@ card on anyone's behalf.
   including cards still waiting to be sent, retain their captured names. An employee's tax identifier cannot change.
   These corrections do not change the ΕΡΓΑΝΗ register; contact the accountant if that needs correcting.
 - Add a branch using its existing ministry number, a label and its own restricted login. Choose whether its standing
-  schedule is read; the connection check runs afterwards. Then enrol its reception device under **Συσκευές**
+  schedule is read; the connection check runs afterwards. The branch is immediately available in **Ημερολόγιο**
+  (Calendar). Then enrol its reception device under **Συσκευές**
   (Devices). Adding it here does not register a branch with the ministry.
 - Rename a branch without changing its number or old cards. Retire it only after work there has stopped. Retired
   branches refuse new cards, including on already enrolled devices. History, receipts, pending submissions, logins
