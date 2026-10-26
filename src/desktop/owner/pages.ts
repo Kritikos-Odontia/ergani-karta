@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { WorkCardDelayReason } from '../../ergani/types.js';
 import { adminCommand } from '../../stamp/admin.js';
@@ -51,6 +52,8 @@ export interface PagesContext {
   erganiSilentSince: (nowMs: number) => number | undefined;
   /** Why the staff page is not open now (the listen error's code), from the stamping service; undefined when it is. */
   staffPageProblem?: () => string | undefined;
+  /** Also visible if a failed archive could not write its durable status (a full disk, for example). */
+  archiveFailed?: () => boolean;
   /** Present when the launcher runs the program (the installed program); absent otherwise — no updates then. */
   updater?: Updater | undefined;
   /** Open an employee's records folder with the system's file browser (not under `--no-open`). */
@@ -288,13 +291,33 @@ ${missingProofsPanel(db, now, heading)}
 <p><button>Δημιουργία</button></p></fieldset></form>`);
   };
 
-  const check: OwnerPage = async ({ csrf }) => {
+  const check: OwnerPage = async ({ method, form, csrf }) => {
+    const settingsHash = createHash('sha256').update(readFileSync(c.paths.settings)).digest('hex');
+    let message = html``;
+    if (method === 'POST') {
+      const branch = form.get('branch') ?? '';
+      if (!codes.includes(branch) || form.get('permissions') !== 'on') message = note('bad', 'Επιβεβαιώστε πρώτα τους περιορισμούς στην πύλη της ΕΡΓΑΝΗ.');
+      else {
+        const state = readDesktopState(c.paths.desktop)!;
+        writeDesktopState(c.paths.desktop, { ...state, permissions: { ...state.permissions, [branch]: { atIso: new Date(c.now()).toISOString(), settingsHash } } });
+      }
+    }
+    let result = html``;
     try {
       const lines = await run(['check']);
-      return done('Έλεγχος σύνδεσης με την ΕΡΓΑΝΗ', csrf, html`<p class="hint">Μόνο ανάγνωση — τίποτα δεν δηλώθηκε.</p><pre>${lines.join('\n')}</pre>`);
+      result = html`<pre>${lines.join('\n')}</pre>`;
     } catch (error) {
-      return done('Έλεγχος σύνδεσης με την ΕΡΓΑΝΗ', csrf, fail(error));
+      result = fail(error);
     }
+    const confirmed = readDesktopState(c.paths.desktop)?.permissions;
+    return done('Έλεγχος σύνδεσης με την ΕΡΓΑΝΗ', csrf, html`${message}
+<p>Μόνο ανάγνωση — τίποτα δεν δηλώθηκε. Ελέγχει ότι ο χρήστης συνδέεται, ότι η λίστα προσφέρει το έντυπο κάρτας και, όπου έχει οριστεί, ότι διαβάζει το ωράριο του προηγούμενου μήνα.</p>
+<p><strong>Δεν αποδεικνύει δικαίωμα υποβολής</strong>, ότι επιτρέπεται μόνο αυτό το έντυπο, ότι ο χρήστης είναι μόνο για API ή ότι ανήκει στο σωστό παράρτημα. Δεν υποβάλλεται δοκιμαστική κάρτα.</p>
+${result}
+<h3>Δικός σας έλεγχος — για κάθε παράρτημα</h3><p>Με τους κύριους κωδικούς, μόνο στην πύλη της ΕΡΓΑΝΗ: <a href="/odigos">ακολουθήστε τον οδηγό</a> και ξαναφορτώστε τον χρήστη για να ελέγξετε το σωστό παράρτημα, μόνο το έντυπο έναρξης/λήξης και «Χρήση μόνο από Υπηρεσίες Διαλειτουργικότητας».</p>
+${codes.map((branch) => html`<form method="post" action="/check"><fieldset><legend>${heading(branch)}</legend>${csrfField(csrf)}<input type="hidden" name="branch" value="${branch}">
+${confirmed?.[branch]?.settingsHash === settingsHash ? note('ok', `Επιβεβαιώθηκε από εσάς στις ${when(confirmed[branch]!.atIso)}· δεν είναι αυτόματος έλεγχος της ΕΡΓΑΝΗ.`) : note('warn', 'Ο περιορισμός δικαιωμάτων δεν έχει επιβεβαιωθεί για αυτές τις ρυθμίσεις.')}
+<p class="check"><input type="checkbox" id="permissions_${branch}" name="permissions"><label for="permissions_${branch}">Έλεγξα στην πύλη το σωστό παράρτημα, μόνο το έντυπο κάρτας και μόνο χρήση API.</label></p><button>Καταγραφή δικής μου επιβεβαίωσης</button></fieldset></form>`)}`);
   };
 
   const backup: OwnerPage = ({ method, form, csrf }) => {
@@ -317,17 +340,16 @@ ${missingProofsPanel(db, now, heading)}
     const state = readDesktopState(c.paths.desktop);
     const chosen = state?.backupFolder;
     return done('Αντίγραφα ασφαλείας', csrf, html`${message}
-<p>Κάθε μέρα, μόνο του, ένα πλήρες αντίγραφο του αρχείου (κάρτες, προσωπικό, μηνιαίο αρχείο) πηγαίνει σε έναν φάκελο που
+<p>Κάθε μέρα, μόνο του, ένα πλήρες αντίγραφο του αρχείου (κάρτες, προσωπικό, μηνιαίο αρχείο, εξαγωγές και ρυθμίσεις) πηγαίνει σε έναν φάκελο που
 διαλέγετε: ένα <strong>USB</strong> που μένει συνδεδεμένο, ή τον φάκελο του <strong>Dropbox</strong>. Κρατιούνται τα
-τελευταία 30. Το αντίγραφο έχει ΑΦΜ και ώρες εργασίας: φυλάξτε το όπως το ίδιο το αρχείο.</p>
+τελευταία 30. Οι ρυθμίσεις και ο κωδικός ΕΡΓΑΝΗ είναι κρυπτογραφημένα: για επαναφορά χρειάζεστε τον κωδικό εργοδότη που είχατε όταν γράφτηκε αυτό το αντίγραφο. Το αντίγραφο έχει ΑΦΜ και ώρες εργασίας: φυλάξτε το όπως το ίδιο το αρχείο.</p>
 <p>Φάκελος τώρα: ${chosen === undefined ? html`<strong>κανένας</strong>` : html`<code>${chosen}</code>`}</p>
 <form method="post" action="/backup"><fieldset><legend>Πού να πηγαίνουν</legend>${csrfField(csrf)}<input type="hidden" name="do" value="folder">
 ${backupCandidates().map((folder) => html`<p class="check"><input type="radio" id="f_${folder}" name="folder" value="${folder}"${folder === chosen ? html` checked` : html``}><label for="f_${folder}">${folder}</label></p>`)}
 <label for="custom">Ή γράψτε τον φάκελο</label><input type="text" id="custom" name="custom">
 <p><button>Αποθήκευση και αντίγραφο τώρα</button></p></fieldset></form>
 ${chosen === undefined ? html`` : html`<form method="post" action="/backup">${csrfField(csrf)}<input type="hidden" name="do" value="now"><p><button class="secondary">Αντίγραφο τώρα</button></p></form>`}
-<p class="hint">Επαναφορά: κλείστε το πρόγραμμα, και αντιγράψτε τα <code>stamp.sqlite</code> και <code>records.sqlite</code>
-ενός αντιγράφου στους φακέλους <code>stamp</code> και <code>records</code> του <code>${c.paths.root}</code>.</p>`);
+<p class="hint">Νέος υπολογιστής: εγκαταστήστε το πρόγραμμα και στην «Πρώτη ρύθμιση» επιλέξτε «Επαναφορά από πλήρες αντίγραφο ασφαλείας». Η αποστολή μένει σταματημένη μέχρι να ελέγξετε τις παλιές εκκρεμότητες με τον λογιστή. Φάκελος δεδομένων τώρα: <code>${c.paths.root}</code>.</p>`);
   };
 
   const updates: OwnerPage = async ({ method, form, csrf }) => {

@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: EUPL-1.2
-import { cpSync, existsSync, readdirSync, renameSync, rmSync, statSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { assertOutsideCodeFolders, newRequestFolder } from '../code-folders.js';
 import type { DesktopPaths } from './paths.js';
-import { readDesktopState, writeDesktopState } from './state.js';
+import { DesktopState, readDesktopState, writeDesktopState } from './state.js';
+import { openRecovery, sealRecovery } from './recovery-seal.js';
+import { z } from 'zod';
 
 /**
  * BACKUP — a copy of the employer's record to a folder the owner chose: a USB stick, or the Dropbox folder (whose own
@@ -14,7 +17,9 @@ import { readDesktopState, writeDesktopState } from './state.js';
  * Each backup is a NEW folder (`<chosen>/Karta Ergasias backups/karta-<UTC time>`), never a merge into an older one:
  *   · both stores copied consistently while the program runs (SQLite's `VACUUM INTO`: a whole, self-contained file,
  *     never half a write);
- *   · the exports folder, as it is.
+ *   · the exports folder, as it is;
+ *   · settings and desktop state sealed to the owner's existing password, including the ministry credential; the
+ *     authenticated envelope also binds the two copied SQLite files by their SHA-256 (docs/DECISIONS.md).
  * The newest `KEEP` backups are kept; older ones in that folder are removed. ⛔ The chosen folder may not be inside a
  * code folder (code-folders.ts): a backup holds ΑΦΜ and working hours.
  * ⚠ A missing folder — the stick not plugged in, Dropbox moved — is a failed backup, said on the owner's home page;
@@ -22,6 +27,8 @@ import { readDesktopState, writeDesktopState } from './state.js';
  */
 export const KEEP = 30;
 export const BACKUPS = 'Karta Ergasias backups';
+const digest = (file: string) => createHash('sha256').update(readFileSync(file)).digest('hex');
+const Recovery = z.object({ settings: z.string(), desktop: DesktopState, hashes: z.record(z.string().regex(/^[a-f0-9]{64}$/)) });
 
 export function backupNow(paths: DesktopPaths, chosen: string, nowMs: number): string {
   if (!existsSync(chosen) || !statSync(chosen).isDirectory()) {
@@ -32,6 +39,9 @@ export function backupNow(paths: DesktopPaths, chosen: string, nowMs: number): s
   // would push out a whole one. (The program, once set up, has both; a missing one is a lost record — main.ts.)
   const missing = [paths.stampDb, paths.recordsDb].filter((store) => !existsSync(store));
   if (missing.length > 0) throw new Error(`λείπει το αρχείο ${missing.join(', ')} — δεν γράφτηκε αντίγραφο· τα προηγούμενα μένουν`);
+  const desktop = readDesktopState(paths.desktop);
+  if (desktop === undefined) throw new Error('λείπουν οι ρυθμίσεις εργοδότη — δεν γράφτηκε αντίγραφο');
+  const settings = readFileSync(paths.settings, 'utf8');
   // Written as `<name>.partial`, renamed to its own name only when whole: a backup that failed half-way (the stick
   // pulled out, the disk full) is removed, and never counts among the ones kept.
   const target = newRequestFolder(join(chosen, BACKUPS), 'karta', nowMs);
@@ -51,6 +61,8 @@ export function backupNow(paths: DesktopPaths, chosen: string, nowMs: number): s
       }
     }
     if (existsSync(paths.exports)) cpSync(paths.exports, join(partial, 'exports'), { recursive: true });
+    const hashes = Object.fromEntries(['stamp.sqlite', 'records.sqlite'].map((name) => [name, digest(join(partial, name))]));
+    writeFileSync(join(partial, 'recovery.json'), sealRecovery(JSON.stringify({ settings, desktop, hashes }), desktop.ownerPassword), { mode: 0o600 });
     renameSync(partial, target);
   } catch (error) {
     rmSync(partial, { recursive: true, force: true });
@@ -58,6 +70,33 @@ export function backupNow(paths: DesktopPaths, chosen: string, nowMs: number): s
   }
   prune(join(chosen, BACKUPS));
   return target;
+}
+
+/** Restore only to a fresh installation. No service starts here; the persistent recovery hold precedes all copies. */
+export function restoreBackup(paths: DesktopPaths, folder: string, password: string, nowMs: number): void {
+  assertOutsideCodeFolders(paths.root, 'ο φάκελος επαναφοράς');
+  assertOutsideCodeFolders(folder, 'το αντίγραφο');
+  if ([paths.settings, paths.desktop, join(paths.root, 'stamp'), join(paths.root, 'records'), paths.exports].some(existsSync)) {
+    throw new Error('η επαναφορά χρειάζεται άδειο φάκελο δεδομένων — δεν αντικαθιστά υπάρχον αρχείο');
+  }
+  let recovered: z.infer<typeof Recovery>;
+  try {
+    recovered = Recovery.parse(JSON.parse(openRecovery(readFileSync(join(folder, 'recovery.json'), 'utf8'), password)));
+    for (const name of ['stamp.sqlite', 'records.sqlite']) {
+      if (digest(join(folder, name)) !== recovered.hashes[name]) throw new Error();
+    }
+  } catch {
+    throw new Error('λάθος κωδικός εργοδότη ή ελλιπές / αλλοιωμένο αντίγραφο');
+  }
+  mkdirSync(paths.root, { recursive: true, mode: 0o700 });
+  // Written FIRST: even a power loss part-way through recovery cannot start the outbox with an old pending card.
+  writeDesktopState(paths.desktop, { ...recovered.desktop, storesSince: recovered.desktop.storesSince ?? new Date(nowMs).toISOString(), recovery: { restoredAt: new Date(nowMs).toISOString() } });
+  for (const [name, target] of [['stamp.sqlite', paths.stampDb], ['records.sqlite', paths.recordsDb]] as const) {
+    mkdirSync(join(paths.root, name === 'stamp.sqlite' ? 'stamp' : 'records'), { recursive: true, mode: 0o700 });
+    cpSync(join(folder, name), target, { errorOnExist: true, force: false });
+  }
+  if (existsSync(join(folder, 'exports'))) cpSync(join(folder, 'exports'), paths.exports, { recursive: true });
+  writeFileSync(paths.settings, recovered.settings, { mode: 0o600, flag: 'wx' });
 }
 
 /** Keep the newest `KEEP` whole backups (by their names, which sort by time); remove the rest, and stale partials. */

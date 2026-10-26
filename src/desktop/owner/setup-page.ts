@@ -137,6 +137,7 @@ export function setupPage(
 ${problems.length > 0 ? note('bad', html`Δεν αποθηκεύτηκε — διορθώστε:<br>${problems.map((p) => html`• ${p}<br>`)}`) : html``}
 <p>Πρώτη ρύθμιση. Τίποτα δεν στέλνεται πουθενά μέχρι να πατήσετε «Αποθήκευση» — και τότε μόνο αποθηκεύεται σε αυτόν τον
 υπολογιστή.</p>
+<p>Αν αλλάξατε υπολογιστή: <a href="/restore">Επαναφορά από πλήρες αντίγραφο ασφαλείας</a>.</p>
 <form method="post" action="/setup" autocomplete="off">
 <input type="hidden" name="rows" value="${form.rows}">
 <fieldset><legend>Όροι χρήσης</legend>

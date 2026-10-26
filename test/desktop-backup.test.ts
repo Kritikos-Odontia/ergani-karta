@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: EUPL-1.2
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import { StoreMissing, ensureStores, restoreSteps } from '../src/desktop/main.js';
-import { BACKUPS, KEEP, backupAndRecord, backupDue, backupNow } from '../src/desktop/backup.js';
+import { BACKUPS, KEEP, backupAndRecord, backupDue, backupNow, restoreBackup } from '../src/desktop/backup.js';
 import { hashPassword } from '../src/desktop/owner/auth.js';
 import { desktopPaths } from '../src/desktop/paths.js';
 import { readDesktopState, writeDesktopState } from '../src/desktop/state.js';
@@ -40,6 +40,7 @@ function installation() {
   mkdirSync(join(paths.exports, 'kartes-1-x'), { recursive: true });
   writeFileSync(join(paths.exports, 'kartes-1-x', 'page.html'), '<p>x</p>');
   writeDesktopState(paths.desktop, { ownerPassword: hashPassword('a long owner password'), nightUpdates: true });
+  writeFileSync(paths.settings, `ERGANI_EMPLOYER_AFM=${AFM.employer}\nERGANI_BRANCH_0_PASSWORD=Fixture.p1\n`, { mode: 0o600 });
   return paths;
 }
 
@@ -50,7 +51,7 @@ describe('the backup', () => {
     const target = backupNow(paths, stick, AT);
     expect(target).toBe(join(stick, BACKUPS, 'karta-20261021T220000'));
     expect(statSync(target).mode & 0o777).toBe(0o700);
-    expect(readdirSync(target).sort()).toEqual(['exports', 'records.sqlite', 'stamp.sqlite']);
+    expect(readdirSync(target).sort()).toEqual(['exports', 'records.sqlite', 'recovery.json', 'stamp.sqlite']);
     const copy = new DatabaseSync(join(target, 'records.sqlite'), { readOnly: true });
     try {
       expect(copy.prepare('SELECT count(*) AS n FROM sqlite_master').get()?.['n']).toBeGreaterThan(3);
@@ -84,7 +85,7 @@ describe('the backup', () => {
     const left = readdirSync(join(stick, BACKUPS)).sort();
     expect(left).toHaveLength(KEEP);
     expect(left.every((name) => /^karta-\d{8}T\d{6}$/.test(name))).toBe(true);
-    expect(readdirSync(join(stick, BACKUPS, left[0]!)).sort()).toEqual(['exports', 'records.sqlite', 'stamp.sqlite']);
+    expect(readdirSync(join(stick, BACKUPS, left[0]!)).sort()).toEqual(['exports', 'records.sqlite', 'recovery.json', 'stamp.sqlite']);
   });
 
   it('⛔ a store gone while the program runs: no backup, none of the 30 whole ones pushed out — each kept one holds both', () => {
@@ -119,6 +120,57 @@ describe('the backup', () => {
     expect(backupAndRecord(paths, AT + 60_000, (l) => lines.push(l)).ok).toBe(true);
     expect(readDesktopState(paths.desktop)?.lastBackup).toEqual({ atIso: new Date(AT + 60_000).toISOString(), ok: true });
   });
+
+  it('recovers settings, owner access, both identical record files and exports on a fresh computer; sending stays held', () => {
+    const paths = installation();
+    const target = backupNow(paths, scratch('usb-'), AT);
+    const envelope = readFileSync(join(target, 'recovery.json'), 'utf8');
+    expect(envelope).not.toContain('Fixture.p1');
+    expect(envelope).not.toContain(readDesktopState(paths.desktop)!.ownerPassword);
+    const fresh = desktopPaths(scratch('new-computer-'));
+    restoreBackup(fresh, target, 'a long owner password', AT + 1);
+    expect(readFileSync(fresh.settings)).toEqual(readFileSync(paths.settings));
+    for (const [file, source] of [['stamp.sqlite', fresh.stampDb], ['records.sqlite', fresh.recordsDb]]) {
+      expect(readFileSync(source!)).toEqual(readFileSync(join(target, file!)));
+    }
+    expect(readFileSync(join(fresh.exports, 'kartes-1-x', 'page.html'), 'utf8')).toBe('<p>x</p>');
+    expect(readDesktopState(fresh.desktop)).toMatchObject({
+      ownerPassword: readDesktopState(paths.desktop)!.ownerPassword,
+      recovery: { restoredAt: new Date(AT + 1).toISOString() },
+    });
+    expect(statSync(fresh.settings).mode & 0o777).toBe(0o600);
+    expect(() => restoreBackup(fresh, target, 'a long owner password', AT + 2)).toThrow(/άδει/);
+  });
+
+  it('a wrong recovery password or altered record is refused before anything is restored', () => {
+    const paths = installation();
+    const target = backupNow(paths, scratch('usb-'), AT);
+    const fresh = desktopPaths(scratch('new-computer-'));
+    expect(() => restoreBackup(fresh, target, 'wrong password', AT)).toThrow(/κωδικ|αντίγραφο/);
+    expect(readdirSync(fresh.root)).toEqual([]);
+    writeFileSync(join(target, 'stamp.sqlite'), 'altered');
+    expect(() => restoreBackup(fresh, target, 'a long owner password', AT)).toThrow(/αντίγραφο/);
+    expect(readdirSync(fresh.root)).toEqual([]);
+  });
+
+  it('missing settings or owner access makes the backup fail, keeping every older complete backup', () => {
+    const paths = installation();
+    const stick = scratch('usb-');
+    backupNow(paths, stick, AT);
+    rmSync(paths.settings);
+    expect(() => backupNow(paths, stick, AT + 1000)).toThrow();
+    expect(readdirSync(join(stick, BACKUPS))).toEqual(['karta-20261021T220000']);
+  });
+
+  it('refuses a pre-existing record directory, including a link, instead of copying a recovery through it', () => {
+    const target = backupNow(installation(), scratch('usb-'), AT);
+    const fresh = desktopPaths(scratch('new-computer-'));
+    const elsewhere = scratch('elsewhere-');
+    symlinkSync(elsewhere, join(fresh.root, 'stamp'), 'junction');
+    expect(() => restoreBackup(fresh, target, 'a long owner password', AT)).toThrow(/άδει/);
+    expect(readdirSync(elsewhere)).toEqual([]);
+    expect(readdirSync(fresh.root)).toEqual(['stamp']);
+  });
 });
 
 describe('desktop.json', () => {
@@ -151,8 +203,9 @@ describe('the stores, once made', () => {
     expect(thrown).toBeInstanceOf(StoreMissing);
     const steps = String(restoreSteps(paths, (thrown as StoreMissing).missing));
     expect(steps).toContain(join(stick, BACKUPS));
-    expect(steps).toContain(`<code>stamp.sqlite</code> στον φάκελο <code>${dirname(paths.stampDb)}</code>`);
-    expect(steps).toContain(`<code>records.sqlite</code> στον φάκελο <code>${dirname(paths.recordsDb)}</code>`);
+    expect(steps).toContain('Πρώτη ρύθμιση');
+    expect(steps).toContain('Μην αντιγράψετε μόνο');
+    expect(steps).toContain(paths.root);
     expect(steps).toContain('επανεκκινήστε τον υπολογιστή');
     expect(steps).toContain('δείτε πρώτα στην ΕΡΓΑΝΗ'); // a card sent after the backup must not be filed twice
     expect(steps).not.toContain('«Αντίγραφα»'); // a page that is not served in this state

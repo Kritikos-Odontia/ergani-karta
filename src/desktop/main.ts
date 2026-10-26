@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 import { appendFileSync, existsSync, mkdirSync } from 'node:fs';
 import { makerMark } from '../assets.js';
-import { basename, dirname, join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { loadEmployerConfig } from '../config.js';
 import { runArchive } from '../records/cli.js';
@@ -13,6 +13,7 @@ import { BACKUPS, backupAndRecord, backupDue } from './backup.js';
 import { GUIDE_PAGE } from './owner/guide.js';
 import { html, note, page, type Html } from './owner/html.js';
 import { ownerPages } from './owner/pages.js';
+import { recoveryPages } from './owner/recovery.js';
 import { openInBrowser } from './open.js';
 import { createOwnerServer, type OwnerPage } from './owner/server.js';
 import { dataDir, desktopPaths, ownerPort, type DesktopPaths } from './paths.js';
@@ -69,7 +70,13 @@ export async function runDesktop(argv: readonly string[], outside: NodeJS.Proces
   let pages: ReadonlyMap<string, OwnerPage> | undefined;
   let stamping: Awaited<ReturnType<typeof runStampService>> | undefined;
   let updater: Updater | undefined;
+  let archiveFailed = false;
   const start = async () => {
+    if (readDesktopState(paths.desktop)?.recovery !== undefined) {
+      pages = recoveryPages(paths, existsSync(paths.settings) ? serviceEnv(paths, outside) : {}, now, start);
+      passProbation();
+      return;
+    }
     const env = serviceEnv(paths, outside);
     const nowIso = new Date(now()).toISOString();
     const state = readDesktopState(paths.desktop);
@@ -85,9 +92,10 @@ export async function runDesktop(argv: readonly string[], outside: NodeJS.Proces
     };
     stamping = await runStampService(env, { onSignals: false, beforeStart: passProbation, pushes, log: (line) => log(`stamp: ${line}`) });
     // The daily run loops for as long as the program runs; a failure of one run is its own (records/cli.ts).
-    runArchive([], env, (line) => log(`archive: ${line}`)).catch((error: unknown) =>
-      log(`archive stopped — ${error instanceof Error ? error.message : String(error)}`),
-    );
+    runArchive([], env, (line) => log(`archive: ${line}`), (outcome) => { archiveFailed = outcome.kind === 'failed'; }).catch((error: unknown) => {
+      archiveFailed = true;
+      log(`archive stopped — ${error instanceof Error ? error.message : String(error)}`);
+    });
     const reloadSettings = async () => {
       // One outbox at a time: finish its active send, release its lock, then use the new logins and headings.
       await stamping?.stop();
@@ -109,7 +117,7 @@ export async function runDesktop(argv: readonly string[], outside: NodeJS.Proces
       });
       updater.start();
     }
-    pages = ownerPages({ paths, env, now, log, reloadSettings, erganiSilentSince: (t) => stamping?.silentSinceMs(t), staffPageProblem: () => stamping?.pageProblem(), updater, openFolders: !values['no-open'] });
+    pages = ownerPages({ paths, env, now, log, reloadSettings, erganiSilentSince: (t) => stamping?.silentSinceMs(t), staffPageProblem: () => stamping?.pageProblem(), archiveFailed: () => archiveFailed, updater, openFolders: !values['no-open'] });
     // The daily backup: looked at every hour, run when a day has passed since the last good one (backup.ts).
     setInterval(() => {
       const state = readDesktopState(paths.desktop);
@@ -150,7 +158,7 @@ export async function runDesktop(argv: readonly string[], outside: NodeJS.Proces
   process.once('SIGTERM', shutdown);
   process.once('SIGINT', shutdown);
 
-  if (existsSync(paths.settings) && existsSync(paths.desktop)) {
+  if ((existsSync(paths.settings) && existsSync(paths.desktop)) || readDesktopState(paths.desktop)?.recovery !== undefined) {
     try {
       await start();
     } catch (error) {
@@ -204,15 +212,15 @@ export class StoreMissing extends Error {
  */
 export function restoreSteps(paths: DesktopPaths, missing: readonly string[]): Html {
   const folder = readDesktopState(paths.desktop)?.backupFolder;
-  const copies = missing.map((store) => html`<li>αντιγράψτε το <code>${basename(store)}</code> στον φάκελο <code>${dirname(store)}</code>·</li>`);
   return html`${note('bad', html`Λείπει ${missing.length > 1 ? 'τα αρχεία' : 'το αρχείο'} του εργοδότη: ${missing.map((store) => html`<code>${store}</code> `)}. Το πρόγραμμα δεν ξεκινά με άδειο αρχείο, για να μη χαθεί η καταγραφή χωρίς να το δείτε.`)}
 <h2>Επαναφορά από αντίγραφο ασφαλείας</h2>
 <ol>
 <li>${folder === undefined ? html`Δεν είχε οριστεί φάκελος αντιγράφων. Αν έχετε κρατήσει αντίγραφο αλλού, ανοίξτε το.` : html`Ανοίξτε τον φάκελο <code>${join(folder, BACKUPS)}</code> (συνδέστε πρώτα το USB, αν είναι εκεί) και μέσα του το νεότερο <code>karta-…</code>.`}</li>
-${copies}
-<li>επανεκκινήστε τον υπολογιστή: το πρόγραμμα ξεκινά μόνο του με το αρχείο που επαναφέρατε.</li>
+<li>κλείστε το πρόγραμμα. Κρατήστε τον φάκελο δεδομένων <code>${paths.root}</code> ολόκληρο με άλλο όνομα, χωρίς να σβήσετε τίποτα.</li>
+<li>επανεκκινήστε τον υπολογιστή. Στην «Πρώτη ρύθμιση» επιλέξτε «Επαναφορά από πλήρες αντίγραφο ασφαλείας» και δώστε τον φάκελο του αντιγράφου και τον κωδικό εργοδότη που είχατε όταν γράφτηκε.</li>
+<li>Η αποστολή μένει σταματημένη μέχρι να ελέγξετε τις παλιές εκκρεμότητες και να ολοκληρώσετε τον έλεγχο στην οθόνη.</li>
 </ol>
-<p class="hint">Ό,τι χτυπήθηκε μετά το αντίγραφο λείπει από αυτό· το μηνιαίο αντίγραφο της ΕΡΓΑΝΗ ξαναδιαβάζεται μόνο του.
+<p class="hint">Μην αντιγράψετε μόνο τα δύο αρχεία πάνω από τις τρέχουσες ρυθμίσεις: έτσι παρακάμπτεται ο έλεγχος πριν ξαναρχίσει η αποστολή. Ό,τι χτυπήθηκε μετά το αντίγραφο λείπει από αυτό· το μηνιαίο αντίγραφο της ΕΡΓΑΝΗ ξαναδιαβάζεται μόνο του.
 ⚠ Μια κάρτα που φαίνεται μετά την επαναφορά να περιμένει απόφαση μπορεί να είχε ήδη σταλεί: δείτε πρώτα στην ΕΡΓΑΝΗ αν
 υπάρχει, πριν επιλέξετε «εκπρόθεσμα» — αλλιώς θα δηλωθεί δεύτερη φορά.</p>`;
 }

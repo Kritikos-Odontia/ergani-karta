@@ -11,6 +11,7 @@ import { heartbeatUrlOf, loadBranchSettings } from '../stamp/config.js';
 import { nextRunAfter, runDailyArchive } from './daily.js';
 import { describePull, pullMonth } from './pull.js';
 import { claimRecordStore, openRecordStore } from './store.js';
+import { recordArchiveStatus, type ArchiveRun } from './status.js';
 
 /**
  * THE MONTHLY ARCHIVE, from the command line — READ ONLY, files nothing.
@@ -170,7 +171,7 @@ export function dueAtStart(store: string, nowMs: number): boolean {
  *   ARCHIVE_HEARTBEAT_URL=…       the monitor's push URL (optional; heartbeat.ts)
  *   ERGANI_EXPORTS_DIR=…          where the comparison pages go (default: `exports/` beside the record)
  */
-export async function runArchive(argv: readonly string[], env: NodeJS.ProcessEnv, log: (line: string) => void): Promise<number> {
+export async function runArchive(argv: readonly string[], env: NodeJS.ProcessEnv, log: (line: string) => void, onStatus?: (outcome: ArchiveRun) => void): Promise<number> {
   const { values } = parseArgs({
     args: [...argv],
     options: { once: { type: 'boolean', default: false }, at: { type: 'string', default: '03:15' } },
@@ -184,28 +185,34 @@ export async function runArchive(argv: readonly string[], env: NodeJS.ProcessEnv
   if (!isAbsolute(exportsDir)) throw new Error('ERGANI_EXPORTS_DIR must be an absolute path.');
   assertOutsideCodeFolders(exportsDir, 'ERGANI_EXPORTS_DIR');
   const url = heartbeatUrlOf(env, 'ARCHIVE_HEARTBEAT_URL');
-  const once = () => {
-    // Desktop settings can change between runs. A run already in progress finishes on its original clients.
-    const employer = loadEmployerConfig(env);
-    const clients = employer.branches.map((config) => new ErganiClient(config));
-    const noStandingSchedule = noStandingScheduleOf(env);
-    markArchiveRun(store, Date.now());
-    return runDailyArchive({
-      // ⛔ Never creates the record: a missing one is this run's failure (`--init-store` creates it, once).
-      openStore: () => {
-        if (!existsSync(store)) throw new Error('no record at ERGANI_RECORDS_DB — it is created once at install (--init-store); refusing to start a new one.');
-        return openRecordStore(store);
-      },
-      clients,
-      noStandingSchedule,
-      realm: employer.erganiRealm,
-      employerAfm: employer.employerAfm,
-      archiveFrom: env['ARCHIVE_FROM'] ?? '',
-      exportsDir,
-      now: Date.now,
-      beat: url === undefined ? undefined : heartbeatSender(url),
-      log,
-    });
+  const once = async () => {
+    try {
+      // Desktop settings can change between runs. A run already in progress finishes on its original clients.
+      const employer = loadEmployerConfig(env);
+      const clients = employer.branches.map((config) => new ErganiClient(config));
+      const noStandingSchedule = noStandingScheduleOf(env);
+      markArchiveRun(store, Date.now());
+      return await runDailyArchive({
+        // ⛔ Never creates the record: a missing one is this run's failure (`--init-store` creates it, once).
+        openStore: () => {
+          if (!existsSync(store)) throw new Error('no record at ERGANI_RECORDS_DB — it is created once at install (--init-store); refusing to start a new one.');
+          return openRecordStore(store);
+        },
+        clients,
+        noStandingSchedule,
+        realm: employer.erganiRealm,
+        employerAfm: employer.employerAfm,
+        archiveFrom: env['ARCHIVE_FROM'] ?? '',
+        exportsDir,
+        now: Date.now,
+        beat: url === undefined ? undefined : heartbeatSender(url),
+        log,
+        status: (outcome) => { onStatus?.(outcome); recordArchiveStatus(store, outcome, Date.now()); },
+      });
+    } catch (error) {
+      onStatus?.({ kind: 'failed' });
+      throw error;
+    }
   };
 
   if (values.once) return (await once()).kind === 'up' ? 0 : 1;

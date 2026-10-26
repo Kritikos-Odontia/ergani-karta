@@ -7,7 +7,24 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { startErganiFake, type ErganiFake } from './fake/ergani-fake.js';
-import { AFM } from './fixtures/people.js';
+import { AFM, ALFA } from './fixtures/people.js';
+import { addPersonForTest, deviceAt, outboxFor } from './fixtures/staff.js';
+import { desktopPaths } from '../src/desktop/paths.js';
+import { saveSetup } from '../src/desktop/owner/server.js';
+import { readSetupForm } from '../src/desktop/owner/setup-page.js';
+import { ensureStores } from '../src/desktop/main.js';
+import { serviceEnv } from '../src/desktop/settings-file.js';
+import { backupNow } from '../src/desktop/backup.js';
+import { openStampStore } from '../src/stamp/store.js';
+import { capturePunch } from '../src/stamp/capture.js';
+import { checkPin, chooseOwnPin } from '../src/stamp/staff.js';
+import { decide } from '../src/stamp/outbox.js';
+import { ENARXI } from '../src/ergani/types.js';
+import { ErganiClient } from '../src/ergani/client.js';
+import { fakeBranchConfig } from './fake/ergani-fake.js';
+import { recordArchiveStatus } from '../src/records/status.js';
+import { heldStamps, openRecordStore } from '../src/records/store.js';
+import { pullMonth } from '../src/records/pull.js';
 import { RELEASES_PAGE, VERSION } from '../src/version.js';
 import { PORT_TAKEN } from '../src/update/versions.js';
 
@@ -72,6 +89,73 @@ async function until(check: () => Promise<boolean>, what: string): Promise<void>
 }
 
 describe('ergani desktop — from an empty folder to a working page', () => {
+  it('recovers on a new computer without re-filing a card sent after the backup, including across a restart', async () => {
+    const fake = await startErganiFake({ now: Date.now, employerAfm: AFM.employer });
+    cleanup.push(() => fake.close());
+    const source = desktopPaths(mkdtempSync(join(tmpdir(), 'karta-source-')));
+    const fresh = desktopPaths(mkdtempSync(join(tmpdir(), 'karta-fresh-')));
+    const stick = mkdtempSync(join(tmpdir(), 'karta-usb-'));
+    cleanup.push(() => [source.root, fresh.root, stick].forEach((p) => rmSync(p, { recursive: true, force: true })));
+    const ownerPort = await freePort();
+    const staffPort = await freePort();
+    const thisMonth = new Date().toISOString().slice(0, 7);
+    saveSetup(source, readSetupForm(new URLSearchParams({
+      afm: AFM.employer, label: 'Δοκιμή', rows: '1', b0_code: '0', b0_user: 'fixture01', b0_pass: 'Fixture.p1',
+      address: '127.0.0.1', port: String(staffPort), realm: 'trial', from: thisMonth, owner: 'a long owner password',
+    }), thisMonth), new Date().toISOString());
+    const outside = { ERGANI_BASE_URL: fake.baseUrl };
+    ensureStores(source, serviceEnv(source, outside), new Date().toISOString(), false);
+    const monthly = openRecordStore(source.recordsDb);
+    await pullMonth(monthly, new ErganiClient(fakeBranchConfig(fake, '0'), { now: () => Date.parse('2026-10-20T09:00:00Z') }), { realm: 'local', employerAfm: AFM.employer, month: '2026-08' });
+    expect(heldStamps(monthly, '2026-08-01', '2026-08-31')).toHaveLength(2);
+    monthly.close();
+    const db = openStampStore(source.stampDb, { name: 'karta', realm: 'local', employerAfm: AFM.employer }, ['0']);
+    const at = Date.now() - 3_600_000;
+    const added = await addPersonForTest(db, ALFA, 'test', at);
+    const pin = await checkPin(db, added.id, added.oneTimePin!, at);
+    if (pin.kind !== 'ok') throw new Error('PIN refused');
+    const chosen = await chooseOwnPin(db, pin.person, '2580', at);
+    if (!chosen.ok) throw new Error('own PIN refused');
+    const card = capturePunch(db, chosen.person, ENARXI, deviceAt(db), at);
+    const backup = backupNow(source, stick, Date.now());
+    // The original computer files AFTER its snapshot: the restored copy must not send that old card again.
+    decide(db, card.id, { kind: 'file_late', fAitiologia: '003' }, { employeeId: undefined, label: 'test', deviceId: undefined }, Date.now());
+    await outboxFor({ db, instance: { name: 'karta', realm: 'local', employerAfm: AFM.employer }, client: new ErganiClient(fakeBranchConfig(fake, '0')), now: Date.now, log: () => undefined }).pass();
+    expect(fake.filed).toHaveLength(1);
+    db.close();
+    const env = { KARTA_DATA_DIR: fresh.root, KARTA_OWNER_PORT: String(ownerPort), ...outside };
+    let child = await startDesktop(env);
+    const owner = `http://127.0.0.1:${ownerPort}`;
+    const post = (path: string, data: Record<string, string>, cookie = '') => fetch(owner + path, { method: 'POST', redirect: 'manual', headers: { origin: owner, cookie, 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(data) });
+    expect(await (await fetch(owner + '/setup')).text()).toContain('/restore');
+    expect((await post('/restore', { folder: backup, password: 'wrong password' })).status).toBe(400);
+    expect(existsSync(fresh.settings)).toBe(false);
+    expect((await post('/restore', { folder: backup, password: 'a long owner password' })).headers.get('location')).toBe('/login');
+    expect(readFileSync(fresh.stampDb)).toEqual(readFileSync(join(backup, 'stamp.sqlite')));
+    expect(readFileSync(fresh.recordsDb)).toEqual(readFileSync(join(backup, 'records.sqlite')));
+    for (let run = 0; run < 2; run++) {
+      const login = await post('/login', { password: 'a long owner password' });
+      const cookie = login.headers.get('set-cookie')!.split(';')[0]!;
+      const home = await (await fetch(owner + '/', { headers: { cookie } })).text();
+      expect(home).toContain('Η αποστολή παραμένει σταματημένη');
+      expect(home).toContain('ΠΑΡΑΔΕΙΓΜΑ ΑΛΦΑ');
+      expect(await fetch(`http://127.0.0.1:${staffPort}/health`).then(() => 'open', () => 'closed')).toBe('closed');
+      expect(fake.filed).toHaveLength(1);
+      const csrf = /name="csrf" value="([^"]+)"/.exec(home)![1]!;
+      if (run === 0) {
+        expect(await (await post('/', { csrf, do: 'resume', checked: 'on' }, cookie)).text()).toContain('Ελέγξτε πρώτα');
+        child.kill('SIGTERM');
+        await new Promise<void>((r) => child.once('exit', () => r()));
+        child = await startDesktop(env);
+      } else {
+        await post('/', { csrf, do: 'covered', card: String(card.id) }, cookie);
+        await post('/', { csrf, do: 'resume', checked: 'on' }, cookie);
+        await until(async () => (await fetch(`http://127.0.0.1:${staffPort}/health`)).ok, 'recovered page');
+        expect(fake.filed).toHaveLength(1);
+      }
+    }
+  }, 30_000);
+
   it('sets up, guards the owner pages, signs in, adds a person, enrols a device — and comes back after a restart', async () => {
     const fake: ErganiFake = await startErganiFake({ now: Date.now, employerAfm: AFM.employer });
     cleanup.push(() => fake.close());
@@ -136,6 +220,29 @@ describe('ergani desktop — from an empty folder to a working page', () => {
     expect(home).toContain('Αρχική');
     const csrf = /name="csrf" value="([^"]+)"/.exec(home)?.[1];
     expect(csrf).toBeDefined();
+
+    // Readiness is visible on the home page, including a failed refresh after a previous good archive.
+    recordArchiveStatus(join(data, 'records', 'records.sqlite'), { kind: 'up' }, Date.parse('2026-10-24T01:15:00Z'));
+    recordArchiveStatus(join(data, 'records', 'records.sqlite'), { kind: 'failed', incomplete: [{ month: '2026-09', branch: '0' }], pages: ['2026-09'] }, Date.now());
+    const archiveHome = await (await get('/', { cookie })).text();
+    expect(archiveHome).toContain('Τελευταίο πλήρες μηνιαίο αρχείο');
+    expect(archiveHome).toContain('2026-09 — παράρτημα 0');
+    expect(archiveHome).toContain('Σελίδες που δεν γράφτηκαν: 2026-09');
+    expect(archiveHome).toContain('Ο τελευταίος έλεγχος του μηνιαίου αρχείου απέτυχε');
+
+    const connection = await (await get('/check', { cookie })).text();
+    expect(connection).toContain('Δεν αποδεικνύει δικαίωμα υποβολής');
+    expect(connection).toContain('name="permissions"');
+    expect(connection).toContain('δεν έχει επιβεβαιωθεί');
+    await post('/check', { csrf: csrf!, branch: '0' }, { cookie });
+    expect(JSON.parse(readFileSync(join(data, 'desktop.json'), 'utf8')).permissions).toBeUndefined();
+    const confirmed = await (await post('/check', { csrf: csrf!, branch: '0', permissions: 'on' }, { cookie })).text();
+    expect(confirmed).toContain('Επιβεβαιώθηκε από εσάς');
+    expect(JSON.parse(readFileSync(join(data, 'desktop.json'), 'utf8')).permissions['0'].atIso).toBeDefined();
+    const savedSettings = readFileSync(join(data, 'settings.env'), 'utf8');
+    writeFileSync(join(data, 'settings.env'), savedSettings + '\n# changed settings\n');
+    expect(await (await get('/check', { cookie })).text()).toContain('δεν έχει επιβεβαιωθεί');
+    writeFileSync(join(data, 'settings.env'), savedSettings);
 
     // ⛔ A form without the session's CSRF token does nothing.
     const person = { do: 'add', afm: AFM.alfa, surname: 'Παράδειγμα', first: 'Άλφα', display: 'Άλφα', exempt: '' };

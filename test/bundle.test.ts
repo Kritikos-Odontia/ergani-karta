@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
-import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -91,6 +91,31 @@ describe('the desktop build', () => {
     const mark = await fetch(`http://127.0.0.1:${staffPort}/odontia-mark.svg`);
     expect(mark.headers.get('content-type')).toBe('image/svg+xml');
     expect(await mark.text()).toContain('<svg');
+
+    // Recovery also runs from the installer bundle alone, on a fresh data folder: no source file or extra key needed.
+    const post = (base: string, path: string, fields: Record<string, string>, cookie = '') => fetch(base + path, {
+      method: 'POST', redirect: 'manual', headers: { origin: base, cookie, 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(fields),
+    });
+    const login = await post(owner, '/login', { password: 'a long owner password' });
+    const cookie = login.headers.get('set-cookie')!.split(';')[0]!;
+    const home = await (await fetch(owner + '/', { headers: { cookie } })).text();
+    const csrf = /name="csrf" value="([^"]+)"/.exec(home)![1]!;
+    const stick = join(root, 'usb');
+    mkdirSync(stick);
+    expect(await (await post(owner, '/backup', { csrf, do: 'folder', custom: stick }, cookie)).text()).toContain('Το αντίγραφο γράφτηκε');
+    const backup = join(stick, 'Karta Ergasias backups', readdirSync(join(stick, 'Karta Ergasias backups'))[0]!);
+    const recovered = join(root, 'recovered');
+    const recoveryPort = await freePort();
+    const recoveryOwner = `http://127.0.0.1:${recoveryPort}`;
+    run(process.execPath, [join(alone, 'app.mjs'), 'desktop', '--no-browser', '--no-open'], { KARTA_DATA_DIR: recovered, KARTA_OWNER_PORT: String(recoveryPort), ERGANI_BASE_URL: fake.baseUrl }, alone);
+    await until('the recovery page', async () => (await fetch(recoveryOwner + '/restore')).ok);
+    expect((await post(recoveryOwner, '/restore', { folder: backup, password: 'a long owner password' })).headers.get('location')).toBe('/login');
+    expect(readFileSync(join(recovered, 'stamp', 'stamp.sqlite'))).toEqual(readFileSync(join(backup, 'stamp.sqlite')));
+    expect(readFileSync(join(recovered, 'records', 'records.sqlite'))).toEqual(readFileSync(join(backup, 'records.sqlite')));
+    const recoveryLogin = await post(recoveryOwner, '/login', { password: 'a long owner password' });
+    const recoveryCookie = recoveryLogin.headers.get('set-cookie')!.split(';')[0]!;
+    expect(await (await fetch(recoveryOwner + '/', { headers: { cookie: recoveryCookie } })).text()).toContain('Η αποστολή παραμένει σταματημένη');
+    expect(fake.filed).toHaveLength(0);
   }, 60_000);
 
   it.skipIf(process.platform === 'win32')('the launcher puts the installer’s version in place and runs it; stopping it stops the program', async () => {

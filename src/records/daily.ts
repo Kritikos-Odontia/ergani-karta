@@ -10,6 +10,7 @@ import { comparisonPage } from '../export/render.js';
 import type { Heartbeat } from '../heartbeat.js';
 import { RealmMismatchError, describePull, pullMonth, type PullReport } from './pull.js';
 import { EmployerMismatchError, recordEmployer } from './store.js';
+import type { ArchiveRun } from './status.js';
 
 /**
  * THE DAILY ARCHIVE RUN — READ ONLY: it reads work-card stamps and schedule out of ΕΡΓΑΝΗ and keeps them. It files
@@ -71,12 +72,22 @@ export interface DailyOptions {
   /** The monitor (heartbeat.ts). Unset: the log only. */
   beat?: Heartbeat | undefined;
   log: (line: string) => void;
+  /** Desktop status, persisted beside the record; operational shapes only, no ministry prose. */
+  status?: (outcome: ArchiveRun) => void;
 }
 
-export type DailyOutcome = { kind: 'up' | 'down'; message: string } | { kind: 'failed'; message: string };
+export type DailyOutcome = ArchiveRun & { message: string };
 
 /** One daily run. Never throws for a failed read or page: that is a `failed` outcome, and the monitor hears nothing. */
 export async function runDailyArchive(o: DailyOptions): Promise<DailyOutcome> {
+  try { return await dailyRun(o); }
+  catch (error) {
+    o.status?.({ kind: 'failed' });
+    throw error;
+  }
+}
+
+async function dailyRun(o: DailyOptions): Promise<DailyOutcome> {
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(o.archiveFrom)) throw new Error('ARCHIVE_FROM must be the first month the archive keeps, YYYY-MM.');
   const thisMonth = athensDate(o.now()).slice(0, 7);
   const months = [5, 4, 3, 2, 1].map((back) => monthsBefore(thisMonth, back)).filter((m) => m >= o.archiveFrom);
@@ -91,8 +102,10 @@ export async function runDailyArchive(o: DailyOptions): Promise<DailyOutcome> {
     if ((recordEmployer(db) ?? o.employerAfm) !== o.employerAfm) throw new EmployerMismatchError();
     const otherRealms = db.prepare('SELECT DISTINCT realm FROM pulls WHERE realm <> ? ORDER BY realm').all(o.realm);
     if (otherRealms.length > 0) throw new RealmMismatchError(o.realm, otherRealms.map((r) => String(r['realm'])));
-    if (months.length === 0) return await tell(o, { kind: 'up', message: `waiting — the archive starts with ${o.archiveFrom}` });
+    if (months.length === 0) return await tell(o, { kind: 'up', waiting: true, message: `waiting — the archive starts with ${o.archiveFrom}` });
     const failed: string[] = [];
+    const incomplete: Array<{ month: string; branch: string }> = [];
+    const pages: string[] = [];
     for (const month of months) {
       for (const client of o.clients) {
         const branch = client.branchCode;
@@ -108,19 +121,21 @@ export async function runDailyArchive(o: DailyOptions): Promise<DailyOutcome> {
           });
         } catch (error) {
           failed.push(`${month} (branch ${branch}: ${error instanceof Error ? error.message : String(error)})`);
+          incomplete.push({ month, branch });
           continue;
         }
         for (const line of describePull(report)) o.log(line);
-        if (report.outcome !== 'complete') failed.push(`${month} (branch ${branch})`);
+        if (report.outcome !== 'complete') { failed.push(`${month} (branch ${branch})`); incomplete.push({ month, branch }); }
       }
       try {
         writePage(o.exportsDir, `sygkrisi-${month}.html`, comparisonPage(monthComparison(db, month), o.now()));
       } catch (error) {
         failed.push(`${month} (its page: ${error instanceof Error ? error.name : 'error'})`);
+        pages.push(month);
       }
     }
     if (failed.length > 0) {
-      return await tell(o, { kind: 'failed', message: `not complete: ${failed.join(', ')} — asked again tomorrow; the monitor stays red until every month is held` });
+      return await tell(o, { kind: 'failed', incomplete, pages, message: `not complete: ${failed.join(', ')} — asked again tomorrow; the monitor stays red until every month is held` });
     }
 
     // What ΕΡΓΑΝΗ answered for last month in each branch's LATEST complete pull — never every row the record ever held:
@@ -132,6 +147,7 @@ export async function runDailyArchive(o: DailyOptions): Promise<DailyOutcome> {
       if (stampRows === 0 && declaredHours > 0) {
         return await tell(o, {
           kind: 'down',
+          incomplete: [{ month: last, branch: client.branchCode }],
           message:
             `${last} held with NO stamp for branch ${client.branchCode}, while its schedule declares working hours — nobody ` +
             'stamped, or ΕΡΓΑΝΗ answered something unrecognised. Check it while ΕΡΓΑΝΗ still holds the month.',
@@ -146,6 +162,7 @@ export async function runDailyArchive(o: DailyOptions): Promise<DailyOutcome> {
 
 /** Log the outcome, and tell the monitor — «up» or «down»; never anything for a failed run. */
 async function tell(o: DailyOptions, outcome: DailyOutcome): Promise<DailyOutcome> {
+  o.status?.(outcome);
   o.log(`${outcome.kind} — ${outcome.message}`);
   if (outcome.kind !== 'failed' && o.beat !== undefined) {
     try {

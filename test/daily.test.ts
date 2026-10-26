@@ -9,6 +9,8 @@ import type { ReadClient } from '../src/ergani/exbase.js';
 import { heartbeatSender } from '../src/heartbeat.js';
 import { dueAtStart, markArchiveRun, noStandingScheduleOf } from '../src/records/cli.js';
 import { REREAD_DAYS, monthsBefore, nextRunAfter, runDailyArchive, type DailyOptions } from '../src/records/daily.js';
+import { readArchiveStatus, recordArchiveStatus } from '../src/records/status.js';
+import { archiveOverview } from '../src/desktop/owner/archive.js';
 import { RealmMismatchError } from '../src/records/pull.js';
 import { EmployerMismatchError, openRecordStore, pullLog } from '../src/records/store.js';
 import { athensInstant } from '../src/stamp/athens.js';
@@ -120,6 +122,50 @@ function install(branches: readonly string[] = ['0'], behave: Behaviour = {}) {
 }
 
 describe('the daily archive run', () => {
+  it('persists the last good archive and every incomplete month/branch, preserving success when a later read fails', async () => {
+    const t = install(['0', '1']);
+    const options = () => t.options({ status: (outcome) => recordArchiveStatus(t.store, outcome, t.options().now()) });
+    await runDailyArchive(options());
+    const good = readArchiveStatus(t.store)!;
+    expect(good).toMatchObject({ kind: 'up', incomplete: [], lastGood: new Date(t.options().now()).toISOString() });
+    t.at('2026-10-29');
+    const failed = { ...options(), clients: [stub('0', t.options().now), stub('1', t.options().now, { failIn: '2026-09' })] };
+    await runDailyArchive(failed);
+    expect(readArchiveStatus(t.store)).toMatchObject({ kind: 'failed', lastGood: good.lastGood, incomplete: [{ month: '2026-09', branch: '1' }] });
+    await runDailyArchive(options());
+    expect(readArchiveStatus(t.store)).toMatchObject({ kind: 'up', incomplete: [], lastGood: new Date(t.options().now()).toISOString() });
+  });
+
+  it('keeps a failed page and a no-stamps warning visible, without treating either as a good archive', async () => {
+    const t = install(['0'], { noStampsIn: '2026-09' });
+    const status = (outcome: Parameters<typeof recordArchiveStatus>[1]) => recordArchiveStatus(t.store, outcome, t.options().now());
+    await runDailyArchive(t.options({ status }));
+    expect(readArchiveStatus(t.store)).toMatchObject({ kind: 'down', incomplete: [{ month: '2026-09', branch: '0' }] });
+    expect(readArchiveStatus(t.store)?.lastGood).toBeUndefined();
+    await runDailyArchive(t.options({ status, exportsDir: join(fileURLToPath(new URL('../', import.meta.url)), 'must-not-write') }));
+    expect(readArchiveStatus(t.store)).toMatchObject({ kind: 'failed', pages: ['2026-05', '2026-06', '2026-07', '2026-08', '2026-09'] });
+  });
+
+  it('keeps never-read months visible after they leave the readable window, and shows a runtime failure when status cannot be saved', async () => {
+    const t = install(['0', '1']);
+    recordArchiveStatus(t.store, { kind: 'up' }, t.options().now());
+    const overview = String(archiveOverview(t.store, '2026-04', ['0', '1'], t.options().now(), true));
+    expect(overview).toContain('2026-04 — παράρτημα 0');
+    expect(overview).toContain('2026-04 — παράρτημα 1');
+    expect(overview).toContain('Ο τελευταίος έλεγχος του μηνιαίου αρχείου απέτυχε');
+    expect(overview).toContain('Τελευταίο πλήρες μηνιαίο αρχείο');
+  });
+
+  it('an archive that cannot even start retains the previously incomplete months and pages until a successful run', async () => {
+    const t = install();
+    recordArchiveStatus(t.store, { kind: 'failed', incomplete: [{ month: '2026-09', branch: '0' }], pages: ['2026-09'] }, t.options().now());
+    const status = (outcome: Parameters<typeof recordArchiveStatus>[1]) => recordArchiveStatus(t.store, outcome, t.options().now());
+    await expect(runDailyArchive(t.options({ archiveFrom: '', status }))).rejects.toThrow(/ARCHIVE_FROM/);
+    expect(readArchiveStatus(t.store)).toMatchObject({ kind: 'failed', incomplete: [{ month: '2026-09', branch: '0' }], pages: ['2026-09'] });
+    await runDailyArchive(t.options({ status }));
+    expect(readArchiveStatus(t.store)).toMatchObject({ kind: 'up', incomplete: [], pages: [] });
+  });
+
   it('reads every month from ARCHIVE_FROM up to last month, five at most, for every branch — then tells the monitor «up»', async () => {
     const t = install(['0', '1']);
     expect(await runDailyArchive(t.options())).toMatchObject({ kind: 'up', message: '2026-09 held — 60 stamp rows; 5 month(s) held' });

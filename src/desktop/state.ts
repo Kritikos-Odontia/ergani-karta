@@ -34,6 +34,10 @@ export const DesktopState = z.object({
   alerts: z.object({ topic: z.string() }).optional(),
   /** When the two stores were first made. From then on a missing store is a lost record, never made again empty. */
   storesSince: z.string().optional(),
+  /** A recovered snapshot must never re-send cards whose outcome changed after it was taken. */
+  recovery: z.object({ restoredAt: z.string() }).optional(),
+  /** A human checked restrictions in the ministry portal; invalidated by any settings change. */
+  permissions: z.record(z.object({ atIso: z.string(), settingsHash: z.string() })).optional(),
   // A field a later version adds is kept (not dropped) when this version rewrites the file — after a rollback, say.
 }).passthrough();
 export type DesktopState = z.infer<typeof DesktopState>;

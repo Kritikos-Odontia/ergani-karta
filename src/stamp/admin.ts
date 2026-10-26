@@ -283,6 +283,9 @@ export async function adminCommand(argv: readonly string[], env: NodeJS.ProcessE
       }
       case 'check': {
         // ⛔ READ ONLY. Lookup/Submissions and EX_BASE_08 are reads; nothing here can file.
+        out('READ ONLY: sign-in, the offered card form, and schedule reading only. No card is filed.');
+        out('This does NOT prove submission rights, card-only restrictions, API-only access, or the correct branch.');
+        out('OWNER STEP: reload each restricted user in the ΕΡΓΑΝΗ portal and confirm its branch, ONLY the card form, and API-only access (docs/ERGANI-USER.md).');
         const asked = values.branch === undefined ? ergani.branches : [branchOf(ergani, values.branch)];
         let failed = false;
         for (const config of asked) {
@@ -292,7 +295,7 @@ export async function adminCommand(argv: readonly string[], env: NodeJS.ProcessE
           const forms = await client.listSubmissions();
           const card = forms.find((f) => f.code === WORK_CARD_CODE);
           if (card === undefined) failed = true;
-          out(card === undefined ? `⛔ ${WORK_CARD_CODE} is NOT offered to this login — it cannot file cards.` : `✓ ${WORK_CARD_CODE} is offered to this login.`);
+          out(card === undefined ? `⛔ ${WORK_CARD_CODE} is NOT offered to this login — check its configuration.` : `✓ ${WORK_CARD_CODE} is offered to this login.`);
           if (settings.branches.find((b) => b.code === branch)?.scheduleFromErgani !== true) {
             out('Schedule: not read for this branch (SCHEDULE=none) — no «not stamped in» alarm here; «not stamped out» works from the open ΕΝΑΡΞΗ.');
             continue;
