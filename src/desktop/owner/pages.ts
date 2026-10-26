@@ -6,7 +6,7 @@ import { adminCommand } from '../../stamp/admin.js';
 import { athensTime } from '../../stamp/athens.js';
 import { branchHeading, loadStampSettings } from '../../stamp/config.js';
 import { allDevices, createEnrollment, revokeDevice } from '../../stamp/devices.js';
-import { cardsMissingProof, decide, openPunches, stateOfPunch } from '../../stamp/outbox.js';
+import { decide, openPunches, stateOfPunch } from '../../stamp/outbox.js';
 import { markQuietDay } from '../../stamp/schedule.js';
 import { addPerson, allStaff, exemptPerson, includePerson, issuePin, personById, setActive, unlockPerson } from '../../stamp/staff.js';
 import { openStampStore, type StampStore } from '../../stamp/store.js';
@@ -24,6 +24,8 @@ import { EASY_SERVER, namelessSender, newEasyTopic } from '../../stamp/notify.js
 // `Html` is markup this program built itself — here, the QR code's SVG (qr.ts); everything else is escaped.
 import { Html, csrfField, html, note, page } from './html.js';
 import type { OwnerPage } from './server.js';
+import { missingProofsPanel, ownerOverview } from './overview.js';
+import { readOverviewMaintenance } from './overview-maintenance.js';
 
 /**
  * THE OWNER'S PAGES — what `ergani admin` does, as pages, on this computer's own store. ⛔ None stamps a card: the
@@ -89,24 +91,18 @@ export function ownerPages(c: PagesContext): ReadonlyMap<string, OwnerPage> {
 
   const home: OwnerPage = ({ csrf }) => {
     const now = c.now();
-    const waiting = openPunches(db).filter((p) => stateOfPunch(db, p, now).kind === 'needs-human').length;
     const state = readDesktopState(c.paths.desktop);
-    const backup = state?.lastBackup;
-    const silent = c.erganiSilentSince(now);
     const pageProblem = c.staffPageProblem?.();
     const available = c.updater?.available();
     const needsInstaller = c.updater?.needsInstaller() === true;
     const byItself = state?.nightUpdates === true && readRollback(c.paths.versions)?.failed !== available && !needsInstaller;
     return done('Αρχική', csrf, html`
 ${ergani.erganiRealm === 'production' ? html`` : note('warn', html`Ρυθμισμένο για το <strong>${ergani.erganiRealm === 'trial' ? 'δοκιμαστικό' : 'δοκιμαστικό (τοπικό)'}</strong> περιβάλλον: ό,τι δηλώνεται δεν είναι πραγματική δήλωση.`)}
-${silent === undefined ? html`` : note('bad', `Ο υπολογιστής δεν φτάνει την ΕΡΓΑΝΗ από τις ${athensTime(silent).time.slice(0, 5)} (${athensTime(silent).date}). Οι κάρτες κρατιούνται και στέλνονται μόλις επανέλθει· αν μια κάρτα περάσει τα 15 λεπτά, ειδοποιήστε την Επιθεώρηση Εργασίας όταν αρχίζει και όταν τελειώνει το πρόβλημα.`)}
 ${pageProblem === undefined ? html`` : note('bad', `Η σελίδα των εργαζομένων δεν ανοίγει στο ${pageAddress}: ${pageProblem === 'EADDRNOTAVAIL' ? 'αυτή η διεύθυνση δεν υπάρχει τώρα σε αυτόν τον υπολογιστή (δεν έχει συνδεθεί ακόμη στο δίκτυο του ιατρείου, ή ο router του έδωσε άλλη)' : pageProblem === 'EADDRINUSE' ? 'τη θύρα την κρατά ήδη άλλο πρόγραμμα' : pageProblem}. Ξαναδοκιμάζει μόνο του κάθε μισό λεπτό· οι κάρτες που περιμένουν στέλνονται κανονικά.`)}
-${waiting > 0 ? note('bad', html`${waiting} κάρτα/-ες χρειάζονται απόφαση: <a href="/queue">Εκκρεμότητες</a>.`) : note('ok', 'Καμία κάρτα δεν περιμένει απόφαση.')}
-${backup === undefined ? note('warn', html`Δεν έχει γίνει ακόμη αντίγραφο ασφαλείας: <a href="/backup">Αντίγραφα</a>.`) : backup.ok ? note('ok', `Τελευταίο αντίγραφο: ${when(backup.atIso)}.`) : note('bad', `Το τελευταίο αντίγραφο απέτυχε: ${backup.problem ?? ''}`)}
+${ownerOverview({ db, nowMs: now, silentSince: c.erganiSilentSince(now), heading, maintenance: readOverviewMaintenance({ paths: c.paths, nowMs: now, archiveFrom: c.env['ARCHIVE_FROM'] ?? '', branches: codes, employerAfm: ergani.employerAfm, realm: ergani.erganiRealm }) })}
 ${rolledBack()}
 ${available === undefined ? html`` : note('warn', html`Νέα έκδοση ${available}: ${needsInstaller ? 'θέλει το νέο πρόγραμμα εγκατάστασης — ' : byItself ? 'εγκαθίσταται μόνη της τη νύχτα, ή ' : ''}<a href="/updates">Ενημερώσεις</a>.`)}
-<p>Η σελίδα των εργαζομένων: <strong>${pageAddress}</strong>${settings.listenHost === '127.0.0.1' ? ' (μόνο σε αυτόν τον υπολογιστή)' : ''}.</p>
-<p><a href="/check">Έλεγχος σύνδεσης με την ΕΡΓΑΝΗ</a> — μόνο ανάγνωση: για κάθε παράρτημα, αν ο χρήστης του συνδέεται και αν του επιτρέπεται η δήλωση κάρτας.</p>`);
+<p>Η σελίδα των εργαζομένων: <strong>${pageAddress}</strong>${settings.listenHost === '127.0.0.1' ? ' (μόνο σε αυτόν τον υπολογιστή)' : ''}.</p>`);
   };
 
   const staff: OwnerPage = async ({ method, form, csrf }) => {
@@ -219,14 +215,13 @@ ${many ? html`<label for="branch">Παράρτημα</label><select id="branch" 
     }
     const now = c.now();
     const waiting = openPunches(db).filter((p) => stateOfPunch(db, p, now).kind === 'needs-human');
-    const missing = cardsMissingProof(db);
     return done('Εκκρεμότητες', csrf, html`${message}
 ${waiting.length === 0 ? note('ok', 'Καμία κάρτα δεν περιμένει απόφαση.') : html``}
 ${waiting.map((p) => html`<form method="post" action="/queue"><fieldset><legend>${personById(db, p.employeeId)?.displayName ?? '—'} — ${p.fType === '0' ? 'ΕΝΑΡΞΗ' : 'ΛΗΞΗ'} ${athensTime(p.eventMs).date} ${athensTime(p.eventMs).time.slice(0, 5)}${many ? ` — ${heading(p.branch)}` : ''}</legend>${csrfField(csrf)}<input type="hidden" name="card" value="${p.id}">
 ${REASONS.map(([code, text]) => html`<p class="check"><input type="radio" id="c${p.id}_${code}" name="choice" value="${code}"><label for="c${p.id}_${code}">Να σταλεί εκπρόθεσμα — ${text}</label></p>`)}
 <p class="check"><input type="radio" id="c${p.id}_cov" name="choice" value="covered"><label for="c${p.id}_cov">Καλύφθηκε αλλιώς (π.χ. CardScanner) — να μη σταλεί από εδώ</label></p>
 <p><button>Απόφαση</button></p></fieldset></form>`)}
-${missing.length > 0 ? note('warn', `${missing.length} κάρτα/-ες στάλθηκαν αλλά η απόδειξη PDF δεν έχει έρθει ακόμη· ζητείται ξανά κάθε μέρα.`) : html``}
+${missingProofsPanel(db, now, heading)}
 <p class="hint">Αν μια κάρτα δεν στάλθηκε μέσα σε 15 λεπτά, ο εργοδότης ειδοποιεί την Επιθεώρηση Εργασίας όταν αρχίζει το πρόβλημα και όταν τελειώνει.</p>`);
   };
 
