@@ -1,27 +1,26 @@
-# Backups and recovery
+# Complete backups
 
-Keep a backup **on another medium**, not only the same disk. It contains staff data: restrict access and protect it as carefully as the original record.
+Keep a backup **on another medium**, not only the same disk. In the desktop program open **Αντίγραφα (Backups)**, choose a connected USB drive or a sync folder you control, then select **Αποθήκευση και αντίγραφο τώρα (Save and back up now)**. Check Home for success. The daily backup retains the newest 30 complete copies.
 
-## Current desktop automatic backup
+Each copy has its own folder under `Karta Ergasias backups/karta-…/`:
 
-On **Αντίγραφα**, choose a connected USB drive or a sync folder you control. The daily backup copies `stamp.sqlite`, `records.sqlite` and any exports. It keeps the newest 30 complete backups. A disconnected USB drive or missing folder is a failure, not a successful backup.
-
-**This version's limit:** automatic backups omit `settings.env` and `desktop.json`. The two SQLite files alone do not provide complete recovery onto a new computer. Full transfer of settings and protected credentials is not yet documented as a rehearsed procedure in this guide.
-
-## Restore records on the same computer
-
-Only with the program stopped and its current settings retained: preserve a protected copy of the existing folder, then restore `stamp.sqlite` into `stamp` and `records.sqlite` into `records`. Do not mix employers or backup dates. Seek technical help if you cannot identify a complete copy.
-
-| System | Default data folder |
+| Content | What it holds |
 |---|---|
-| Windows | `%LOCALAPPDATA%\Karta Ergasias` |
-| Mac | `~/Library/Application Support/Karta Ergasias` |
-| Linux | `~/.local/share/karta-ergasias` (or your configured XDG data folder) |
+| `stamp.sqlite` | Staff, PINs, devices, cards, decisions, responses and available proof PDFs. |
+| `records.sqlite` | The monthly archive already read. |
+| `exports/`, if present | Exported pages and files. |
+| `recovery.json` | Encrypted settings, ΕΡΓΑΝΗ password and owner access, plus integrity checks for both SQLite files. |
 
-Do not put staff records in a code folder or share settings/passwords.
+## Which password recovery needs
 
-## Docker and replacing a computer
+Keep **the owner password used when that particular backup was created** in your password manager. Changing today's password does not change older backups. Without the correct earlier password, the encrypted recovery settings cannot be opened. A qualified technician can still read the two record files; do not send your data or passwords through a chat.
 
-For a technical installation, preserve both volumes **and** a separate protected copy of `.env`, accessible only to the owner. The technician must make consistent SQLite copies, not copy during a write. Preserve the original machine/media. Do not start a second active installation that sends the same pending cards.
+Encryption protects the backup's settings. **The SQLite files and exports are not encrypted by the program.** Protect the USB drive, sync account and computer like the staff record. The live local settings file retains its existing private-file protection.
 
-Use [CardScanner](daily.md) while a failed computer's page is unavailable. A new empty installation does not recover the old record. Full replacement-computer instructions will follow the recovery rehearsal; this limit is also in [KNOWN-LIMITS.md](../../KNOWN-LIMITS.md).
+## Check availability
+
+A disconnected USB drive or missing folder is a failure. Check the last attempt on Home. A cloud-only folder is insufficient for recovery: wait for it to download fully. A USB drive lost with the computer is not an available backup.
+
+For complete recovery follow [New computer — recovery](new-computer.md). **Do not copy just the two SQLite files over an active installation**: that bypasses the hold and checks before sending resumes. Older copies without `recovery.json` cannot use guided complete recovery; preserve them and take a new complete backup while the original machine works.
+
+Docker needs your own backup tool: both volumes, exports and `.env` in an encrypted backup, using consistent SQLite copies. Guided recovery and its automatic hold apply to the desktop program. See the [separate technical handling](new-computer.md).

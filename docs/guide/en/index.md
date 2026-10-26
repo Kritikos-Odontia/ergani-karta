@@ -11,6 +11,10 @@ Work Card runs on your practice's computer. Each employee stamps their own ΕΝ�
 - Retains the local record and reads monthly copies from ΕΡΓΑΝΗ for the employer's archive.
 - Serves one employer with multiple branches, each with its own restricted login.
 - Shows missed-card indications subject to the [schedule limits](requirements.md).
+- Gives each employee [only their own history](employee-history.md) after their own PIN.
+- Brings problems together on [owner Home](owner-overview.md), with [settings and branch administration](settings.md).
+- Prepares an [accountant export](accountant-export.md) and [reminder calendar](reminder-calendar.md), without filing schedules.
+- Keeps [complete backups](backups.md), with guided [new-computer recovery](new-computer.md) and checks before sending resumes.
 
 ## Where to start
 

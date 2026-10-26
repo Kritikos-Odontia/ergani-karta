@@ -12,7 +12,7 @@ A confirmed submission returns a protocol number. The proof PDF can be pending s
 
 ## An employee's own record
 
-Employees can request their own records. Give each person only their own file, not the entire staff folder. In a technical installation:
+Active staff who stamp can view [My own history](employee-history.md) with their PIN. Employees can also request their own records. Give each person only their own file, not the entire staff folder. In a technical installation:
 
 ```sh
 docker compose exec stamp ergani admin history --afm <tax-identifier> --from YYYY-MM-DD --to YYYY-MM-DD --out /data/stamp/exports
@@ -23,3 +23,5 @@ This creates a printable Greek page and spreadsheet in a fresh folder for the re
 ## Check the monthly read
 
 The archive runs daily, rereading recent months and appending changes. A failure or unknown response shape does not mean “nobody worked”. With Docker inspect `docker compose logs archive`. Do not leave months unchecked: ΕΡΓΑΝΗ may stop returning them later.
+
+For the accountant’s movements, outcomes and PDF package, see [Accountant export](accountant-export.md). [Home](owner-overview.md) shows the last successful daily archive check, newer failures, incomplete months/branches and missing comparison pages.

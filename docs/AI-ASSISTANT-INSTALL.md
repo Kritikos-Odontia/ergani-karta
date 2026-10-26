@@ -48,7 +48,7 @@ What to check, and tell the owner, at the end:
 
 - `docker compose ps` shows `stamp` healthy and `archive` running; the staff page answers on the private address chosen
   at setup (`/health`).
-- `ergani check` says, for each branch, that its login works and that the work-card form is permitted — service responses. It does not prove the absence of broader permissions: the owner explicitly verifies the selected form and API-only restriction in the portal (ERGANI-USER.md, steps 4–5).
+- `ergani check` confirms each branch's sign-in, an offered `WRKCardSE` form and, where enabled, one previous-month schedule read. It does not prove filing rights, card-only scope, API-only access, the correct branch or monthly completeness. The owner reloads the restricted user in the portal and verifies those settings explicitly (ERGANI-USER.md). On desktop the owner records that human confirmation on the connection page; with Docker they keep their own note.
 - The owner adds staff and enrols the reception computer with `ergani admin` ([ADMIN.md](ADMIN.md)); the one-time PINs
   are handed over in person, never through you.
 - Backups: the two named volumes hold the five-year record; set up a copy off the machine ([INSTALL.md](INSTALL.md)).

@@ -55,10 +55,45 @@
       }
     },
     {
+      "slug": "connection-check",
+      "title": {
+        "el": "Έλεγχος σύνδεσης και δικαιωμάτων",
+        "en": "Connection and permission checks"
+      }
+    },
+    {
       "slug": "daily",
       "title": {
         "el": "Κάθε μέρα — προσωπικό και CardScanner",
         "en": "Daily use — staff and CardScanner"
+      }
+    },
+    {
+      "slug": "employee-history",
+      "title": {
+        "el": "Οι δικές μου κινήσεις",
+        "en": "My own history"
+      }
+    },
+    {
+      "slug": "owner-overview",
+      "title": {
+        "el": "Η καθημερινή εικόνα του εργοδότη",
+        "en": "Owner daily overview"
+      }
+    },
+    {
+      "slug": "settings",
+      "title": {
+        "el": "Ρυθμίσεις και παραρτήματα",
+        "en": "Settings and branches"
+      }
+    },
+    {
+      "slug": "outage-queue",
+      "title": {
+        "el": "Μετά από διακοπή — ουρά αποστολής",
+        "en": "After an outage — sending queue"
       }
     },
     {
@@ -76,10 +111,31 @@
       }
     },
     {
+      "slug": "accountant-export",
+      "title": {
+        "el": "Αρχείο για τον λογιστή",
+        "en": "Accountant export"
+      }
+    },
+    {
+      "slug": "reminder-calendar",
+      "title": {
+        "el": "Ημερολόγιο υπενθυμίσεων",
+        "en": "Reminder calendar"
+      }
+    },
+    {
       "slug": "backups",
       "title": {
-        "el": "Αντίγραφα και επαναφορά",
-        "en": "Backups and recovery"
+        "el": "Πλήρη αντίγραφα ασφαλείας",
+        "en": "Complete backups"
+      }
+    },
+    {
+      "slug": "new-computer",
+      "title": {
+        "el": "Νέος υπολογιστής — επαναφορά",
+        "en": "New computer — recovery"
       }
     },
     {
@@ -104,48 +160,5 @@
       }
     }
   ],
-  "planned": [
-    {
-      "slug": "owner-overview",
-      "title": {
-        "el": "Η καθημερινή εικόνα του εργοδότη",
-        "en": "Owner daily overview"
-      }
-    },
-    {
-      "slug": "settings",
-      "title": {
-        "el": "Ρυθμίσεις και παραρτήματα",
-        "en": "Settings and branches"
-      }
-    },
-    {
-      "slug": "accountant-export",
-      "title": {
-        "el": "Εξαγωγή για τον λογιστή",
-        "en": "Accountant export"
-      }
-    },
-    {
-      "slug": "reminder-calendar",
-      "title": {
-        "el": "Ημερολόγιο υπενθυμίσεων",
-        "en": "Reminder calendar"
-      }
-    },
-    {
-      "slug": "outage-queue",
-      "title": {
-        "el": "Ουρά μετά από διακοπή",
-        "en": "Queue after an outage"
-      }
-    },
-    {
-      "slug": "employee-history",
-      "title": {
-        "el": "Το ιστορικό μου με PIN",
-        "en": "My history with a PIN"
-      }
-    }
-  ]
+  "planned": []
 }

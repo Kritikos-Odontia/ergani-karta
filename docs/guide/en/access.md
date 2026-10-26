@@ -18,7 +18,7 @@ Master credentials are used only in the portal to create the restricted user. Th
 
 On the installation computer open `http://127.0.0.1:8881`. Read the terms; enter the employer, branches and their restricted logins. Choose the practice's private address and port 8880. Production requires explicit confirmation. Set an owner password of at least 10 characters; keep it from staff.
 
-“Έλεγχος σύνδεσης” only reads. It can check sign-in and service responses, but **does not by itself prove the user lacks broader permissions**. The owner explicitly verifies the portal settings above.
+The [connection check](connection-check.md) only reads: it confirms sign-in, an offered form and, where enabled, one schedule read. **It does not prove filing rights, card-only scope, API-only access or the correct branch.** Verify those in the portal and record your human confirmation on the check page. Master credentials stay in the portal.
 
 ## Staff and their personal PIN
 

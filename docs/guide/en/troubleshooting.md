@@ -22,6 +22,10 @@ Check internet access and the selected register. With the owner verify the restr
 
 Protocol number without PDF: check the pending receipt; do not stamp again. Failed monthly read: inspect archive messages; do not interpret failure as an empty month. Failed backup: check the USB connection, destination folder and free space. See [records](records.md) and [backups](backups.md).
 
+## Recovery problem
+
+Use a complete backup with `recovery.json` and the owner password from that date. The program does not overwrite an existing record. After recovery, stopped sending is expected until the [check with the accountant](new-computer.md). Do not bypass that hold by copying only the SQLite files.
+
 ## Reporting a bug
 
 Support is not provided. You can report a bug to the project with version, operating system and reproduction steps using fabricated data. No real tax identifiers, names, protocol numbers, logins or settings files. For a security flaw use [private reporting](download.md), not a public issue.

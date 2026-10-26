@@ -16,7 +16,7 @@ Free, without support and without warranty; each practice is responsible for its
 
 - **Οι εργαζόμενοι χτυπούν κάρτα** σε μια σελίδα στον υπολογιστή της υποδοχής, ο καθένας με τον **δικό του κωδικό** —
   ΕΝΑΡΞΗ όταν φτάνει, ΛΗΞΗ όταν φεύγει.
-- **Κάθε κάρτα στέλνεται στην ΕΡΓΑΝΗ αμέσως**, μέσα στο 15λεπτο που ορίζει ο νόμος, με ξαναδοκιμές αν η ΕΡΓΑΝΗ δεν
+- **Η αποστολή κάθε κάρτας ξεκινά αμέσως**, με ξαναδοκιμές μέσα στο χρονικό όριο πριν από το νόμιμο 15λεπτο αν η ΕΡΓΑΝΗ δεν
   απαντά, και κρατιέται ο **αριθμός πρωτοκόλλου** και το **αποδεικτικό PDF**.
 - **Ό,τι δεν περνά, το βλέπει άνθρωπος**: η σελίδα δείχνει ποια κάρτα δεν στάλθηκε, ζητά την αιτία εκπρόθεσμης
   δήλωσης, και θυμίζει την ειδοποίηση της Επιθεώρησης Εργασίας. Προαιρετικά, ειδοποίηση και στο κινητό του εργοδότη.
@@ -91,7 +91,7 @@ Software **an employer runs itself**, on its own machine, for Greece's **digital
 filed to the Ministry of Labour's **ΕΡΓΑΝΗ ΙΙ** register.
 
 - **Staff stamp their own** ΕΝΑΡΞΗ (start) and ΛΗΞΗ (end) on a page at the reception computer, each with their own PIN.
-- **Each card is filed at once**, inside the statutory 15 minutes, retried while ΕΡΓΑΝΗ does not answer; the protocol
+- **Sending starts at once**, with retries inside the sending window before the statutory 15 minutes while ΕΡΓΑΝΗ does not answer; the protocol
   number and the proof PDF are kept.
 - **What does not go through reaches a person**: the page shows the card, asks for the late-filing reason, and reminds
   the employer to notify the labour inspectorate. Optional pushes to the owner's phone (a self-hosted ntfy).

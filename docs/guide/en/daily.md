@@ -19,4 +19,4 @@ For a split shift, stamp at the start **and end of every interval**. At another 
 
 **One real movement, one card.** A pending send may have reached ΕΡΓΑΝΗ with its response lost. Do not repeat that arrival or departure in CardScanner. Keep CardScanner installed for when the page cannot capture a card.
 
-Printable staff sheet: [STAFF-SHEET.md](../../STAFF-SHEET.md) (Greek). For previous days ask the owner for [your own record](records.md).
+Printable staff sheet: [STAFF-SHEET.md](../../STAFF-SHEET.md) (Greek). For earlier days open [My own history](employee-history.md) with your PIN. You can also ask the owner for an [individual record export](records.md).

@@ -19,7 +19,8 @@ The program does not do payroll, hiring, dismissal or schedule filings. The acco
 - **A slow ΕΡΓΑΝΗ:** fresh cards are reconsidered after every send, ahead of unrelated older late cards. A request already in flight must finish and can still delay them. Watch the page and unresolved cards.
 - **Monthly archive:** ΕΡΓΑΝΗ answers one month behind. An unknown response shape is refused and shown as a problem, not as “no movements”. Findings come from a limited set of accounts.
 - **Computer, power or network failure:** the page may be unavailable. Use [CardScanner only when the page cannot capture a card](daily.md).
-- **Backups:** current automatic backups omit settings. Read [backup and recovery](backups.md) before treating them as a replacement-computer plan.
+- **Recovery:** needs a complete backup and the owner password used then. The program does not encrypt record files/exports. Later changes are absent; the [recovery check](new-computer.md) is required before sending resumes.
+- **Overnight work:** the shape of a monthly ministry response for a post-midnight departure remains unconfirmed. The program preserves the original working day locally; an unknown answer is refused rather than treated as an empty day.
 - **Retiring a branch:** its record and restricted login remain for pending submissions, receipts and archive reads. There is no reactivation screen, and retiring it here does not close it at ΕΡΓΑΝΗ.
 
 Detailed technical limits are kept in [KNOWN-LIMITS.md](../../KNOWN-LIMITS.md) (English).
