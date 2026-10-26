@@ -34,7 +34,7 @@ function csv(rows: readonly (readonly unknown[])[]): Buffer {
 const LOCAL = 'Τοπική καταγραφή';
 const CONFIRMED = 'Επιβεβαιωμένο από τη νεότερη ανάγνωση ΕΡΓΑΝΗ';
 const EARLIER = 'Παλαιότερη ανάγνωση — δεν επιστρέφεται πλέον';
-const afmCell = (afm: string) => `'${afm}`; // preserve the leading zeros in Excel
+const identifierCell = (value: string | undefined) => value !== undefined && /^\d+$/.test(value) ? `'${value}` : value ?? ''; // preserve zeros and precision in Excel
 
 /** Only saved records enter this function. There is no client, credential, PIN or network operation. */
 export function accountantFiles(db: StampStore, archive: RecordStore | undefined, period: ExportPeriod, nowMs: number,
@@ -58,9 +58,9 @@ export function accountantFiles(db: StampStore, archive: RecordStore | undefined
     const attempts = attemptsOf(db, p.id);
     const proofs: string[] = [];
     for (const a of attempts) {
-      results.push([p.id, a.id, p.referenceDate, p.branch, afmCell(p.afm), new Date(a.finishedMs).toISOString(),
+      results.push([p.id, a.id, p.referenceDate, p.branch, identifierCell(p.afm), new Date(a.finishedMs).toISOString(),
         a.outcome === 'filed' ? 'Στάλθηκε — με πρωτόκολλο' : a.outcome === 'refused' ? 'Απορρίφθηκε' : 'Χωρίς επιβεβαίωση',
-        a.httpStatus, a.message, a.protocol, a.submitDate, a.fAitiologia, LOCAL, environment]);
+        a.httpStatus, a.message, identifierCell(a.protocol), a.submitDate, a.fAitiologia, LOCAL, environment]);
       if (a.outcome !== 'filed') continue;
       const evidence = db.prepare('SELECT id, pdf FROM evidence WHERE attempt_id = ? AND pdf IS NOT NULL ORDER BY id').all(a.id);
       for (const e of evidence) {
@@ -75,8 +75,8 @@ export function accountantFiles(db: StampStore, archive: RecordStore | undefined
       : state.kind === 'needs-human' ? 'Δεν επιβεβαιώθηκε — χρειάζεται απόφαση'
       : state.kind === 'sending-late' ? 'Σε εκπρόθεσμη αποστολή' : 'Σε αποστολή';
     const issue = state.kind === 'filed' ? '' : state.kind === 'covered' ? 'Ελέγξτε την κάλυψη με τον λογιστή / CardScanner' : 'Δεν υπάρχει επιβεβαιωμένη υποβολή από εδώ';
-    const row = [p.id, p.referenceDate, p.branch, branchName(p.branch), afmCell(p.afm), p.surname, p.firstName,
-      p.fType === '0' ? 'ΕΝΑΡΞΗ' : 'ΛΗΞΗ', p.fDate, status, state.kind === 'filed' ? state.protocol : '',
+    const row = [p.id, p.referenceDate, p.branch, branchName(p.branch), identifierCell(p.afm), p.surname, p.firstName,
+      p.fType === '0' ? 'ΕΝΑΡΞΗ' : 'ΛΗΞΗ', p.fDate, status, state.kind === 'filed' ? identifierCell(state.protocol) : '',
       last?.outcome === 'filed' ? '' : last?.message ?? '', issue, proofs.join(' | ') || (state.kind === 'filed' ? 'Το PDF δεν έχει ληφθεί' : ''), LOCAL, environment];
     movements.push(row);
     if (state.kind !== 'filed') unresolved.push(row);
@@ -89,7 +89,7 @@ export function accountantFiles(db: StampStore, archive: RecordStore | undefined
   const readIndex = new Map(reads.map((r) => [`${r.branch}:${r.day}`, r]));
   files.set('ministry-readback.csv', csv([
     ['Εργάσιμη ημέρα', 'Κωδικός παραρτήματος', 'Παράρτημα', 'ΑΦΜ', 'Ημερομηνία ΕΡΓΑΝΗ', 'ΕΝΑΡΞΗ', 'ΛΗΞΗ', 'ΛΗΞΗ επόμενη ημέρα', 'Αντίγραφα στη νεότερη ανάγνωση', 'Νεότερη επιτυχής ανάγνωση στις', 'Πηγή', 'Περιβάλλον'],
-    ...held.map((r) => [r.day, r.branch, branchName(r.branch), afmCell(r.afm), r.date, r.hourFrom, r.hourTo, r.endsNextDay ? 'Ναι' : 'Όχι',
+    ...held.map((r) => [r.day, r.branch, branchName(r.branch), identifierCell(r.afm), r.date, r.hourFrom, r.hourTo, r.endsNextDay ? 'Ναι' : 'Όχι',
       r.inLatestRead, readIndex.get(`${r.branch}:${r.day}`)?.readAt ?? '', r.inLatestRead > 0 ? CONFIRMED : EARLIER, environment]),
   ]));
   const branches = [...new Set([...storeBranches(db), ...reads.map((r) => r.branch), ...held.map((r) => r.branch)])];

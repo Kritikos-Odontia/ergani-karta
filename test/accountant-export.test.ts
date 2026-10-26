@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readdirSync, readFileSync, rmSyn
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { writeAccountantExport } from '../src/export/accountant.js';
+import { accountantFiles, writeAccountantExport } from '../src/export/accountant.js';
 import { afterEach, expect, it } from 'vitest';
 import { createOwnerServer } from '../src/desktop/owner/server.js';
 import { hashPassword } from '../src/desktop/owner/auth.js';
@@ -179,4 +179,13 @@ it('refuses an accountant export inside a code folder', async () => {
   expect(() => writeAccountantExport({ db, recordsPath: paths.recordsDb,
     out: join(fileURLToPath(new URL('../', import.meta.url)), 'accountant-exports'),
     period: { from: '2026-09-01', to: '2026-09-30' }, nowMs: athensInstant('2026-10-26', '12:00'), branchName: () => 'Έδρα' })).toThrow(/inside a code folder/);
+});
+
+it('preserves a numeric protocol as text so Excel cannot round it or remove its leading zeros', async () => {
+  const { db } = await setup({ archive: false });
+  // Deliberately all zeroes: a fabricated protocol, never borrowed from a filing.
+  db.prepare("INSERT INTO attempts (punch_id, started_ms, finished_ms, f_aitiologia, outcome, protocol, submit_date) VALUES (2, 1, 1, '', 'filed', '00000000000000000000', '01/10/2026 02:00')").run();
+  const files = accountantFiles(db, undefined, { from: '2026-09-30', to: '2026-09-30' }, athensInstant('2026-10-26', '12:00'), () => 'Έδρα');
+  expect(files.get('movements.csv')!.toString()).toContain(`"'00000000000000000000"`);
+  expect(files.get('submission-results.csv')!.toString()).toContain(`"'00000000000000000000"`);
 });
