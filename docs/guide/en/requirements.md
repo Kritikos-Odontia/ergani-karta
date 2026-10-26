@@ -16,7 +16,7 @@ The program does not do payroll, hiring, dismissal or schedule filings. The acco
 
 - **Split shifts:** how ΕΡΓΑΝΗ merges multiple intervals on the same day is unconfirmed. Stamp every arrival and departure. An older arrival that could overwrite a later declaration is referred to the accountant.
 - **Missed-card indications:** use the same weekday in the latest available week of the previous month. Leave, holidays and changed schedules need checking. Without schedule reading, an open-shift indication appears at 21:00 and can miss a midday departure.
-- **After an outage:** in this version, older approved late sends can delay a new card. Watch the page and unresolved cards.
+- **A slow ΕΡΓΑΝΗ:** fresh cards are reconsidered after every send, ahead of unrelated older late cards. A request already in flight must finish and can still delay them. Watch the page and unresolved cards.
 - **Monthly archive:** ΕΡΓΑΝΗ answers one month behind. An unknown response shape is refused and shown as a problem, not as “no movements”. Findings come from a limited set of accounts.
 - **Computer, power or network failure:** the page may be unavailable. Use [CardScanner only when the page cannot capture a card](daily.md).
 - **Backups:** current automatic backups omit settings. Read [backup and recovery](backups.md) before treating them as a replacement-computer plan.
