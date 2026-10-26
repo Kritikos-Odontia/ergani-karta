@@ -23,6 +23,7 @@ import { RELEASES_PAGE, VERSION } from '../../version.js';
 import { EASY_SERVER, namelessSender, newEasyTopic } from '../../stamp/notify.js';
 // `Html` is markup this program built itself — here, the QR code's SVG (qr.ts); everything else is escaped.
 import { Html, csrfField, html, note, page } from './html.js';
+import { calendarPage } from './calendar-page.js';
 import type { OwnerPage } from './server.js';
 import { missingProofsPanel, ownerOverview } from './overview.js';
 import { readOverviewMaintenance } from './overview-maintenance.js';
@@ -439,6 +440,7 @@ ${note('ok', 'Οι ειδοποιήσεις είναι ανοιχτές — χω
     ['/devices', devices],
     ['/queue', queue],
     ['/days', days],
+    ['/calendar', calendarPage(db, settings.branches, c.now)],
     ['/records', records],
     ['/check', check],
     ['/backup', backup],

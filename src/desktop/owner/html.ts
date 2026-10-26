@@ -32,6 +32,7 @@ export const NAV: ReadonlyArray<readonly [string, string]> = [
   ['/staff', 'Προσωπικό'],
   ['/devices', 'Συσκευές'],
   ['/queue', 'Εκκρεμότητες'],
+  ['/calendar', 'Ημερολόγιο'],
   ['/days', 'Κλειστές μέρες'],
   ['/records', 'Αρχείο εργαζομένου'],
   ['/backup', 'Αντίγραφα'],

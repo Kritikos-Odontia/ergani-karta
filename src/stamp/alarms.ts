@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: EUPL-1.2
 import type { ReadClient } from '../ergani/exbase.js';
 import { ENARXI, LIXI } from '../ergani/types.js';
-import { athensInstant, athensTime, clockOf, shortGreek } from './athens.js';
+import { addDays, athensInstant, athensTime, clockOf, shortGreek } from './athens.js';
+import { reminderDay } from './calendar.js';
 import { rowToPunch, type Punch } from './capture.js';
 import { withoutAfm, type Push, type PushSender } from './notify.js';
 import { cardsMissingProof, openPunches, punchById, stateOfPunch, WALL_MS } from './outbox.js';
@@ -134,9 +135,8 @@ export function forgotAlarms(db: StampStore, nowMs: number, title: string, branc
   if (live.length === 0) return [];
 
   const schedules = live
-    .filter((b) => b.fromSchedule)
     .map((b) => {
-      const read = scheduleForDay(db, b.code, today);
+      const read = b.fromSchedule ? scheduleForDay(db, b.code, today) : undefined;
       return { branch: b, read, declared: new Map((read?.rows === undefined ? [] : declaredDays(read.rows)).map((d) => [d.afm, d])) };
     });
   const quiet = isQuietDay(db, today);
@@ -151,7 +151,9 @@ export function forgotAlarms(db: StampStore, nowMs: number, title: string, branc
 
     for (const { branch, declared } of schedules) {
       const day = declared.get(person.afm);
-      const intervals = day === undefined || day.off ? [] : day.intervals;
+      const local = reminderDay(db, today, person.id, branch.code);
+      const revision = local.revision === undefined ? '' : `:calendar-${local.revision}`;
+      const intervals = local.off ? [] : local.intervals ?? (day === undefined || day.off ? [] : day.intervals);
 
       // Interval i is «not stamped in» while no stint of hers overlaps it, from its start + 20′ — each interval of a
       // σπαστό ωράριο on its own (schedule.ts, DeclaredDay). ⚠ Matched by TIME, never by counting the day's cards: a
@@ -159,12 +161,12 @@ export function forgotAlarms(db: StampStore, nowMs: number, title: string, branc
       if (!quiet) {
         intervals.forEach((iv, i) => {
           const from = athensInstant(today, iv.start);
-          const to = iv.end > iv.start ? athensInstant(today, iv.end) : Infinity;
+          const to = athensInstant(iv.end > iv.start ? today : addDays(today, 1), iv.end);
           const covered = stints.some((s) => s.startMs < to && (s.endMs === undefined || s.endMs > from));
           if (!covered && nowMs >= from + NO_START_GRACE_MS) {
             lines.push(
               red(
-                `no-start:${person.id}:${today}:${branch.code}:${i}`,
+                `no-start:${person.id}:${today}:${branch.code}:${i}${revision}`,
                 `${person.displayName} — δεν έχει χτυπήσει κάρτα ΕΝΑΡΞΗΣ (βάρδια από ${iv.start}${where(branch.code)}).`,
               ),
             );
@@ -174,14 +176,13 @@ export function forgotAlarms(db: StampStore, nowMs: number, title: string, branc
 
       // Still «in» past the end + 30′ of an interval her open stint began before — or past every declared end (below).
       for (const [i, iv] of intervals.entries()) {
-        if (iv.end <= iv.start) continue;
-        const end = athensInstant(today, iv.end);
+        const end = athensInstant(iv.end > iv.start ? today : addDays(today, 1), iv.end);
         ends.push(end + NO_END_GRACE_MS);
         if (open !== undefined && open.startMs < end && nowMs >= end + NO_END_GRACE_MS) {
           raised = true;
           lines.push(
             red(
-              `no-end:${person.id}:${today}:${branch.code}:${i}`,
+              `no-end:${person.id}:${today}:${branch.code}:${i}${revision}`,
               `${person.displayName} — δεν έχει χτυπήσει κάρτα ΛΗΞΗΣ (ΕΝΑΡΞΗ ${clockOf(open.startMs)}, βάρδια ως ${iv.end}${where(branch.code)}).`,
             ),
           );
@@ -206,11 +207,31 @@ export function forgotAlarms(db: StampStore, nowMs: number, title: string, branc
     }
   }
 
+  // A locally marked overnight shift keeps its working day after midnight. Only its still-open arrival is
+  // checked here; today's leave or holiday must not conceal yesterday's genuine missing departure.
+  const yesterday = addDays(today, -1);
+  const previousCards = punchesOn(db, yesterday);
+  for (const person of stampingStaff(db)) {
+    const open = stintsOf(previousCards.filter((p) => p.employeeId === person.id)).at(-1);
+    if (open === undefined || open.endMs !== undefined) continue;
+    for (const branch of live) {
+      const local = reminderDay(db, yesterday, person.id, branch.code);
+      for (const [i, iv] of (local.intervals ?? []).entries()) {
+        if (iv.end > iv.start) continue;
+        const end = athensInstant(today, iv.end);
+        if (open.startMs < end && nowMs >= end + NO_END_GRACE_MS) {
+          lines.push(red(`no-end:${person.id}:${yesterday}:${branch.code}:${i}:calendar-${local.revision}`,
+            `${person.displayName} — δεν έχει χτυπήσει κάρτα ΛΗΞΗΣ (ΕΝΑΡΞΗ ${clockOf(open.startMs)}, βάρδια ${yesterday} ως ${iv.end}${where(branch.code)}).`));
+        }
+      }
+    }
+  }
+
   const known = new Set(allStaff(db).map((p) => p.afm));
   const strangers = new Set<string>();
   for (const { branch, read, declared } of schedules) {
     if (read === undefined) {
-      if (latestScheduleRead(db, branch.code, today)?.error !== undefined) {
+      if (branch.fromSchedule && latestScheduleRead(db, branch.code, today)?.error !== undefined) {
         const key = `schedule-unknown:${branch.code}:${today}`;
         const text =
           `Δεν διάβασα το ωράριο${where(branch.code) === '' ? '' : ` (${branch.label})`} από την ΕΡΓΑΝΗ: σήμερα ο έλεγχος ` +
