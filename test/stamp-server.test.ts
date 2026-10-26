@@ -37,11 +37,11 @@ afterEach(async () => {
   clock = athensInstant('2026-10-05', '09:00');
 });
 
-async function boot() {
+async function boot(branches = ['0']) {
   const fake: ErganiFake = await startErganiFake({ now });
   cleanup.push(() => fake.close());
   const instance: Instance = { name: 'testclinic', realm: 'local', employerAfm: fake.employerAfm };
-  const db: StampStore = initStampStore(':memory:', instance, ['0'], 'now');
+  const db: StampStore = initStampStore(':memory:', instance, branches, 'now');
   cleanup.push(() => db.close());
   const client = new ErganiClient(fakeClientConfig(fake), { now });
   const outbox = outboxFor({ db, client, instance, now, log: () => undefined });
@@ -49,7 +49,7 @@ async function boot() {
     db,
     hooks: { outbox },
     instance: 'testclinic',
-    branches: [{ code: '0', heading: 'Οδοντιατρείο Δοκιμής', inspectorateEmail: 'inspectorate@example.invalid' }],
+    branches: branches.map((code) => ({ code, heading: code === '0' ? 'Οδοντιατρείο Δοκιμής' : 'Δεύτερο', inspectorateEmail: 'inspectorate@example.invalid' })),
     cookieSecure: false,
     now,
     log: () => undefined,
@@ -555,5 +555,118 @@ describe('an employer with two branches — one page per branch, one store', () 
     await expect(adminCommand(['enroll', '--label', 'Υποδοχή'], two, io)).rejects.toThrow(/--branch/);
     await adminCommand(['enroll', '--branch', '1', '--label', 'Υποδοχή'], two, io);
     expect(lines[0]).toMatch(/^For «Κάρτα Εργασίας — Λιμάνι»/);
+  });
+});
+
+// A history ticket must stay bound to the person and device whose own PIN was checked. These cases catch trusting
+// an employee id from the browser, leaking a decision maker's name, bypassing PIN limits, or granting stamp rights.
+describe('the employee\'s own history', () => {
+  async function ownPerson(db: StampStore, fixture = ALFA, pin = '2580') {
+    const added = await addPersonForTest(db, fixture, 'test', clock);
+    const first = await checkPin(db, added.id, added.oneTimePin!, clock);
+    if (first.kind !== 'ok') throw new Error('test PIN refused');
+    const chosen = await chooseOwnPin(db, first.person, pin, clock);
+    if (!chosen.ok) throw new Error(chosen.problem);
+    return chosen.person;
+  }
+  const range = { from: '2026-10-01', to: '2026-10-31' };
+
+  it('returns only her stamps and their filing results, across branches, with no other person\'s details or editing', async () => {
+    const { db, base, outbox, fake } = await boot(['0', '1']);
+    const cookie = await enrol(db, base);
+    const who = await ownPerson(db);
+    const other = await ownPerson(db, VITA, '1397');
+    const device = deviceAt(db);
+    capturePunch(db, who, '0', device, clock);
+    await outbox.pass();
+    clock += 60_000;
+    const covered = capturePunch(db, who, '1', device, clock);
+    // A decision about HER card can name someone else in the owner's record, never in HER history on the desk.
+    db.prepare("INSERT INTO decisions (punch_id, kind, by_employee_id, by_label, at_ms) VALUES (?, 'covered', ?, ?, ?)")
+      .run(covered.id, other.employeeId, other.displayName, clock);
+    capturePunch(db, other, '0', device, clock);
+    clock += 60_000;
+    capturePunch(db, who, '0', deviceAt(db, '1', 'Δεύτερο'), clock);
+    const before = db.prepare('SELECT count(*) AS n FROM punches').get()?.['n'];
+    const pin = await json(post(base, '/api/pin', { employeeId: who.employeeId, pin: '2580' }, cookie));
+    const res = await post(base, '/api/history', { ticket: pin.ticket, employeeId: other.employeeId, ...range }, cookie);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('cache-control')).toBe('no-store');
+    const data = await json(res);
+    expect(data.rows).toHaveLength(3);
+    expect(data.rows[0].branch).toBe('Δεύτερο');
+    expect(data.rows.map((r: any) => r.state.kind)).toEqual(['sending', 'covered', 'filed']);
+    expect(data.rows[2].state.protocol).toBe(fake.filed[0]!.protocol);
+    expect(data.name).toBe('Άλφα');
+    expect(JSON.stringify(data)).not.toContain('Βήτα');
+    expect(JSON.stringify(data)).not.toContain(AFM.alfa);
+    expect(JSON.stringify(data)).not.toContain(AFM.vita);
+    expect(data.more).toBe(false);
+    expect(db.prepare('SELECT count(*) AS n FROM punches').get()?.['n']).toBe(before);
+    // A history-only ticket cannot become a card; the original stamp ticket has also been consumed.
+    expect((await post(base, '/api/stamp', { ticket: data.ticket, type: '0' }, cookie)).status).toBe(409);
+    expect((await post(base, '/api/stamp', { ticket: pin.ticket, type: '0' }, cookie)).status).toBe(409);
+  });
+
+  it('a wrong PIN returns no history and shares the existing five-attempt lock with stamping', async () => {
+    const { db, base } = await boot();
+    const cookie = await enrol(db, base);
+    const who = await ownPerson(db);
+    for (let i = 0; i < 5; i++) {
+      const answer = await post(base, '/api/pin', { employeeId: who.employeeId, pin: '0000' }, cookie);
+      expect(answer.status).toBe(i === 4 ? 423 : 401);
+      expect(await answer.text()).not.toMatch(/rows|ticket|Άλφα/);
+    }
+    expect((await post(base, '/api/pin', { employeeId: who.employeeId, pin: '2580' }, cookie)).status).toBe(423);
+    const forged = await post(base, '/api/history', { employeeId: who.employeeId, ticket: 'forged', ...range }, cookie);
+    expect(forged.status).toBe(409);
+    expect(await forged.text()).not.toContain('rows');
+  });
+
+  it('refuses unenrolled devices, another origin, a one-time PIN, another device and expired history tickets', async () => {
+    const { db, base } = await boot();
+    const cookie = await enrol(db, base);
+    const otherCookie = await enrol(db, base);
+    const added = await addPersonForTest(db, ALFA, 'test', clock);
+    const temporary = await json(post(base, '/api/pin', { employeeId: added.id, pin: added.oneTimePin }, cookie));
+    expect((await post(base, '/api/history', { ticket: temporary.ticket, ...range }, cookie)).status).toBe(409);
+    const own = await json(post(base, '/api/own-pin', { ticket: temporary.ticket, newPin: '2580' }, cookie));
+    expect((await post(base, '/api/history', { ticket: own.ticket, ...range }, '')).status).toBe(403);
+    expect((await post(base, '/api/history', { ticket: own.ticket, ...range }, cookie, 'http://evil.invalid')).status).toBe(403);
+    expect((await post(base, '/api/history', { ticket: own.ticket, ...range }, otherCookie)).status).toBe(409);
+    const data = await json(post(base, '/api/history', { ticket: own.ticket, ...range }, cookie));
+    expect(data.rows).toEqual([]);
+    clock += 2 * 60_000;
+    const expired = await post(base, '/api/history', { ticket: data.ticket, ...range }, cookie);
+    expect(expired.status).toBe(409);
+    expect(await expired.text()).not.toContain('rows');
+  });
+
+  it('pages through a chosen working-day range without repeats, including an overnight stamp, and rejects invalid dates', async () => {
+    const { db, base } = await boot();
+    const cookie = await enrol(db, base);
+    const who = await ownPerson(db);
+    const device = deviceAt(db);
+    capturePunch(db, who, '0', device, athensInstant('2026-09-30', '23:30'));
+    const night = capturePunch(db, who, '1', device, athensInstant('2026-10-01', '00:15'));
+    expect(night.referenceDate).toBe('2026-09-30');
+    for (let i = 0; i < 101; i++) capturePunch(db, who, i % 2 === 0 ? '0' : '1', device, clock + Math.floor(i / 2) * 1000);
+    const login = () => json(post(base, '/api/pin', { employeeId: who.employeeId, pin: '2580' }, cookie));
+    const pin = await login();
+    for (const bad of [{ from: '2026-02-30', to: range.to }, { from: range.to, to: range.from }]) {
+      expect((await post(base, '/api/history', { ticket: pin.ticket, ...bad }, cookie)).status).toBe(400);
+    }
+    const first = await json(post(base, '/api/history', { ticket: pin.ticket, ...range }, cookie));
+    expect(first.rows).toHaveLength(100);
+    expect(first.more).toBe(true);
+    clock += 60_000;
+    capturePunch(db, who, '1', device, clock);
+    const second = await json(post(base, '/api/history', { ticket: first.ticket, ...range, before: first.before }, cookie));
+    expect(second.rows).toHaveLength(1);
+    expect(second.more).toBe(false);
+    expect(new Set([...first.rows, ...second.rows].map((r: any) => r.id)).size).toBe(101);
+    const overnight = await json(post(base, '/api/history', { ticket: second.ticket, from: '2026-09-30', to: '2026-09-30' }, cookie));
+    expect(overnight.rows).toHaveLength(2);
+    expect(overnight.rows[0]).toMatchObject({ day: '2026-09-30', type: '1', at: night.eventMs });
   });
 });

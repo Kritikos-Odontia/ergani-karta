@@ -407,17 +407,30 @@ export class Outbox {
 
   async #passOnce(): Promise<void> {
     try {
-      // ⓘ OLDEST FIRST among the cards due now — so when two cards of one person are both due, the earlier goes first.
-      // ⚠ NOT more than that: a card waiting out its retry gap can be overtaken by a later card of the same person and
-      // day, and if that later ΛΗΞΗ is filed first, rule 3's bound holds the day's ΕΝΑΡΞΗ for a human («covered» only;
-      // the accountant corrects). ⚖ By design (docs/DECISIONS.md, «The clock-out is never delayed»): a ΛΗΞΗ never waits
-      // behind its day's pending ΕΝΑΡΞΗ. A «fresh before late» order was tried and dropped (it made the overtaking more
-      // likely); its own cost is stated in docs/KNOWN-LIMITS.md («Late sends and a slow ΕΡΓΑΝΗ»).
-      for (const punch of openPunches(this.#db)) {
-        const state = stateOfPunch(this.#db, punch, this.#now());
-        if ((state.kind === 'sending' || state.kind === 'sending-late') && state.nextAttemptMs <= this.#now()) {
-          await this.#attempt(punch, state);
-        }
+      // Re-read after EVERY send: a stamp captured while a slow late send was in flight must get its own window.
+      // Fresh cards go first, except for earlier DUE cards of the same person and working day (at any branch).
+      // A failed earlier card is tried only once here: its retry gap never holds back a ΛΗΞΗ («The clock-out is
+      // never delayed», docs/DECISIONS.md). Rule 3's uncertain-send bound is rechecked by stateOfPunch every time.
+      const tried = new Set<number>();
+      let sentLate = false;
+      for (;;) {
+        const now = this.#now();
+        const due = openPunches(this.#db).flatMap((punch) => {
+          if (tried.has(punch.id)) return [];
+          const state = stateOfPunch(this.#db, punch, now);
+          return (state.kind === 'sending' || state.kind === 'sending-late') && state.nextAttemptMs <= now
+            ? [{ punch, state }]
+            : [];
+        });
+        const fresh = due.find(({ state }) => state.kind === 'sending');
+        const earlier = fresh === undefined ? undefined : due.find(({ punch }) =>
+          punch.employeeId === fresh.punch.employeeId && punch.referenceDate === fresh.punch.referenceDate &&
+          (punch.eventMs < fresh.punch.eventMs || (punch.eventMs === fresh.punch.eventMs && punch.id < fresh.punch.id)));
+        const next = earlier ?? fresh ?? (sentLate ? undefined : due[0]);
+        if (next === undefined) break;
+        tried.add(next.punch.id);
+        if (next.state.kind === 'sending-late') sentLate = true;
+        await this.#attempt(next.punch, next.state);
       }
       // At most one proof fetch per pass: a card always goes before a PDF.
       await this.#oneEvidenceFetch();

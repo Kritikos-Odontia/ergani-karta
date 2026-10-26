@@ -86,6 +86,11 @@ button { font: inherit; }
 .choices label { display: block; padding: 10px 0; font-size: 24px; }
 .who { display: flex; flex-wrap: wrap; gap: 10px; margin: 10px 0; }
 .who button.chosen { outline: 5px solid #7cc58f; }
+.history article { border-top: 1px solid #ccc; padding: 16px 0; font-size: 20px; overflow-wrap: anywhere; }
+.history article p { margin: 8px 0; }
+.history-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.history-filters input { font: inherit; max-width: 100%; }
+@media (max-width: 480px) { #panel { padding: 18px; } .big { min-width: 0; width: 100%; margin: 8px 0; padding: 18px 10px; } }
 `;
 
 export const APP_JS = `'use strict';
@@ -107,6 +112,7 @@ export const APP_JS = `'use strict';
   let seenRed = new Set();
   let idle = null;
   let flow = null;
+  let historyOpen = false;
   // Which screen is up: every show() and close() moves it on, so a timer set for one person's result screen can never
   // close the next person's PIN pad.
   let screen = 0;
@@ -308,6 +314,7 @@ export const APP_JS = `'use strict';
     $('flow').hidden = true;
     $('panel').replaceChildren();
     flow = null;
+    historyOpen = false;
     clearTimeout(idle);
   }
   function touch() {
@@ -371,7 +378,55 @@ export const APP_JS = `'use strict';
     const last = session.last ? 'Τελευταία κίνηση: ' + TYPE[session.last.type] + ', ' + dayTime(session.last.at) + '.' : 'Δεν υπάρχει προηγούμενη κίνηση.';
     const btn = (t) => el('button', { class: 'big' + (session.suggestion === t ? ' suggested' : ''), onclick: () => confirmCard(session, t) }, TYPE_LONG[t]);
     flow = { press: () => {} };
-    show(el('h2', {}, session.name), el('p', {}, last), btn('0'), btn('1'), el('div', {}, el('button', { class: 'small', onclick: close }, 'Άκυρο')));
+    show(el('h2', {}, session.name), el('p', {}, last), btn('0'), btn('1'),
+      el('div', {}, el('button', { class: 'small', onclick: () => readHistory(session, session.historyRange.from, session.historyRange.to) }, 'Οι κινήσεις μου')),
+      el('div', {}, el('button', { class: 'small', onclick: close }, 'Άκυρο')));
+  }
+
+  // The history consumes the stamp ticket. Leaving it means a fresh PIN before another stamp or history read.
+  async function readHistory(session, from, to, before) {
+    historyOpen = true;
+    flow = { press: () => {} };
+    show(el('h2', {}, 'Οι κινήσεις μου'), el('p', {}, 'Φόρτωση…'), el('button', { class: 'small', onclick: close }, 'Τέλος'));
+    let answer;
+    try { answer = await flowApi('/api/history', { ticket: session.ticket, from, to, before }); }
+    catch (e) {
+      show(el('h2', {}, 'Οι κινήσεις μου'), el('p', { class: 'error' }, 'Δεν φορτώθηκε το ιστορικό. Ξεκινήστε πάλι από το όνομά σας.'),
+        el('button', { class: 'small', onclick: close }, 'Τέλος'));
+      return;
+    }
+    if (answer.status !== 200) {
+      show(el('h2', {}, 'Οι κινήσεις μου'), el('p', { class: 'error' }, answer.data.text || 'Δεν φορτώθηκε το ιστορικό. Ξεκινήστε πάλι από το όνομά σας.'),
+        el('button', { class: 'small', onclick: close }, 'Τέλος'));
+      return;
+    }
+    const data = answer.data;
+    const next = { ticket: data.ticket };
+    const fromInput = el('input', { type: 'date', value: data.from });
+    const toInput = el('input', { type: 'date', value: data.to });
+    const err = el('p', { class: 'error' });
+    const filter = el('button', { class: 'small', onclick: () => {
+      if (!fromInput.value || !toInput.value || fromInput.value > toInput.value) { err.textContent = 'Ελέγξτε τις ημερομηνίες.'; return; }
+      readHistory(next, fromInput.value, toInput.value);
+    } }, 'Εμφάνιση');
+    const rows = el('div', { class: 'history' });
+    for (const r of data.rows) {
+      const s = r.state;
+      const text = s.kind === 'filed'
+        ? (s.late ? 'Στάλθηκε εκπρόθεσμα στην ΕΡΓΑΝΗ ✓' : 'Στάλθηκε στην ΕΡΓΑΝΗ ✓') + ' — αριθμός πρωτοκόλλου ' + s.protocol
+        : s.kind === 'covered' ? 'Δεν στάλθηκε από εδώ — αναλήφθηκε εκτός εφαρμογής. Δεν υπάρχει επιβεβαίωση ΕΡΓΑΝΗ εδώ.'
+        : s.kind === 'needs-human' ? 'Εκκρεμεί απόφαση — δεν υπάρχει επιβεβαίωση ΕΡΓΑΝΗ εδώ.'
+        : s.kind === 'sending-late' ? 'Στέλνεται εκπρόθεσμα — αναμένεται επιβεβαίωση ΕΡΓΑΝΗ.'
+        : 'Στέλνεται — αναμένεται επιβεβαίωση ΕΡΓΑΝΗ.';
+      rows.append(el('article', {}, el('strong', {}, TYPE[r.type] + ' — ' + dayTime(r.at)),
+        el('p', {}, 'Εργάσιμη ημέρα: ' + r.day + (r.branch ? ' · ' + r.branch : '')), el('p', {}, text)));
+    }
+    show(el('h2', {}, session.name || data.name, ' — Οι κινήσεις μου'),
+      el('p', {}, 'Μόνο οι δικές σας κινήσεις από αυτή την εφαρμογή. Η κατάσταση είναι αυτή τη στιγμή· για ανανέωση πατήστε «Εμφάνιση». Η οθόνη κλείνει μετά από ένα λεπτό αδράνειας.'),
+      el('div', { class: 'history-filters' }, el('label', {}, 'Από ', fromInput), el('label', {}, 'Έως ', toInput), filter), err,
+      data.rows.length ? rows : el('p', {}, 'Δεν υπάρχουν κινήσεις σε αυτή την περίοδο.'),
+      data.more ? el('button', { class: 'small', onclick: () => readHistory(next, data.from, data.to, data.before) }, 'Παλαιότερες κινήσεις') : null,
+      el('div', {}, el('button', { class: 'big', onclick: close }, 'Τέλος')));
   }
 
   function confirmCard(session, type) {
@@ -465,12 +520,16 @@ export const APP_JS = `'use strict';
 
   document.addEventListener('keydown', (e) => {
     if ($('flow').hidden || !flow) return;
+    touch();
     if (/^[0-9]$/.test(e.key)) flow.press(e.key);
     else if (e.key === 'Backspace') flow.press('back');
     else if (e.key === 'Escape') close();
   });
 
+  document.addEventListener('pointerdown', () => { if (historyOpen) touch(); });
+  $('panel').addEventListener('scroll', () => { if (historyOpen) touch(); });
   document.addEventListener('visibilitychange', () => {
+    if (document.hidden && historyOpen) close();
     if (!document.hidden) refresh();
   });
   refresh();

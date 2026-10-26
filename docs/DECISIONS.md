@@ -16,6 +16,23 @@ waits behind its day's pending ΕΝΑΡΞΗ;** the rare case goes to the account
 intervals in a day is ever measured to make an ΕΝΑΡΞΗ after a ΛΗΞΗ harmless, rule 3's bound — and this question — go
 away.
 
+## Fresh cards keep their window while a late backlog drains
+
+An unrelated old card approved for late sending must not consume a newly stamped card's automatic sending window.
+The outbox therefore re-reads the queue after each attempt. Among due cards it takes a fresh card first, promoting
+any earlier due cards of the same person and working day ahead of it, across all branches. Each card is tried at most
+once per pass. A failed earlier card's retry gap never holds up a ΛΗΞΗ; rule 3 still blocks an ΕΝΑΡΞΗ once a later card
+may have reached ΕΡΓΑΝΗ. Without a fresh card needing those earlier cards, at most one late card is sent in a pass.
+The next pass continues the durable backlog, also after a restart. There is still only one filing in flight per store.
+
+## Personal history carries no authority to stamp
+
+The staff page's «Οι κινήσεις μου» uses the employee's own PIN check, with the same attempt limits as stamping. The
+checked person's identity and enrolled device are held in a short-lived ticket; the browser cannot select a different
+person's history. Opening history consumes the stamp ticket and returns history-only tickets for paging and filtering.
+The view sends no ΑΦΜ, ministry error prose or other decision maker's name. Reading never writes a card or decision.
+On the shared screen, «Τέλος», a hidden tab or one minute without interaction clears it; a new visit starts with a PIN.
+
 ## One arrival, one card
 
 While a card is still being sent, nothing tells staff to stamp it again elsewhere (on the ministry's CardScanner app,
