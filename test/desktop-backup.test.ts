@@ -153,6 +153,21 @@ describe('the backup', () => {
     expect(readdirSync(fresh.root)).toEqual([]);
   });
 
+  it('after the owner changes password, each backup still opens only with the password used for that snapshot', () => {
+    const paths = installation();
+    const stick = scratch('usb-');
+    const older = backupNow(paths, stick, AT);
+    writeDesktopState(paths.desktop, { ...readDesktopState(paths.desktop)!, ownerPassword: hashPassword('a different owner password') });
+    const newer = backupNow(paths, stick, AT + 1000);
+    const oldComputer = desktopPaths(scratch('older-recovery-'));
+    expect(() => restoreBackup(oldComputer, older, 'a different owner password', AT)).toThrow(/κωδικός/);
+    restoreBackup(oldComputer, older, 'a long owner password', AT);
+    const newComputer = desktopPaths(scratch('newer-recovery-'));
+    expect(() => restoreBackup(newComputer, newer, 'a long owner password', AT)).toThrow(/κωδικός/);
+    restoreBackup(newComputer, newer, 'a different owner password', AT);
+    expect(readDesktopState(newComputer.desktop)?.ownerPassword).toBe(readDesktopState(paths.desktop)?.ownerPassword);
+  });
+
   it('missing settings or owner access makes the backup fail, keeping every older complete backup', () => {
     const paths = installation();
     const stick = scratch('usb-');
