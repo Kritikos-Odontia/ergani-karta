@@ -181,3 +181,9 @@ own folder (never removed by uninstalling — it is the employer's five-year rec
 Dropbox folder, and **updates itself at night with releases signed by the project's key only**, going back by itself if
 a new version does not start. Nothing is sent anywhere except one daily question to GitHub for the newest release.
 Staff on phones need the practice's own Wi-Fi (plain HTTP on the local network; never a guest network).
+
+## Ρυθμίσεις μετά την εγκατάσταση / Settings after installation
+
+Η σύνδεση ΕΡΓΑΝΗ, ο κωδικός εργοδότη, τα ονόματα και τα παραρτήματα αλλάζουν από τις **Ρυθμίσεις** στις σελίδες
+του εργοδότη: [SETTINGS.md](SETTINGS.md). No configuration file editing is needed for these desktop changes; the
+[settings instructions](SETTINGS.md) are in Greek and English.

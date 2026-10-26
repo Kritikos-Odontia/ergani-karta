@@ -70,10 +70,16 @@ What ΕΡΓΑΝΗ answers was measured on real accounts (the forms list, the rea
 PDF's shape). No `EX_BASE_07` stamp row with hours has been seen yet in the shapes this reader expects for every
 employer: an answer in another shape is refused and shown — never read as «no stamp».
 
-## A branch is never removed
+## Retired branches keep their login; reactivation has no screen
 
-A branch, once in the stores, keeps its login in the settings: its cards are part of the five-year record, and the
-service refuses to start with a branch it cannot file for. Closing a branch for good is not yet a command.
+The desktop owner's Settings page can retire a branch: new cards stop, while history, pending submissions, proof
+PDF retrieval and archive reads remain. Its restricted login must stay in the settings. There is no deletion or
+reactivation screen, and retiring it here does not close it at the ministry. See [SETTINGS.md](SETTINGS.md).
+
+## Settings changes finish work already in progress
+
+The desktop finishes its current send before reopening the staff service with changed settings. A monthly archive
+run already in progress keeps its original connection until it finishes; the next run uses the new settings.
 
 ## If the machine that runs it is down, so is the page
 

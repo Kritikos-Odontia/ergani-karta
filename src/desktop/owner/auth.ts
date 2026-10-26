@@ -47,6 +47,7 @@ export function passwordMatches(password: string, stored: string): boolean {
 }
 
 interface Session {
+  passwordHash: string;
   csrf: string;
   startedMs: number;
   seenMs: number;
@@ -80,16 +81,20 @@ export class OwnerSessions {
     }
     this.#failures.length = 0;
     const token = randomBytes(32).toString('base64url');
-    this.#sessions.set(token, { csrf: randomBytes(32).toString('base64url'), startedMs: now, seenMs: now });
+    this.#sessions.set(token, { passwordHash: stored, csrf: randomBytes(32).toString('base64url'), startedMs: now, seenMs: now });
     return { kind: 'ok', token };
   }
 
   /** The session's CSRF token if `token` is a live session (and it is now used), else `undefined`. */
-  touch(token: string | undefined): string | undefined {
+  touch(token: string | undefined, passwordHash?: string): string | undefined {
     if (token === undefined) return undefined;
     const session = this.#sessions.get(token);
     if (session === undefined) return undefined;
     const now = this.#now();
+    if (passwordHash !== undefined && passwordHash !== session.passwordHash) {
+      this.#sessions.delete(token);
+      return undefined;
+    }
     if (now - session.seenMs > IDLE_MS || now - session.startedMs > MAX_MS) {
       this.#sessions.delete(token);
       return undefined;

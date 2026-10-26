@@ -184,9 +184,11 @@ export async function runArchive(argv: readonly string[], env: NodeJS.ProcessEnv
   if (!isAbsolute(exportsDir)) throw new Error('ERGANI_EXPORTS_DIR must be an absolute path.');
   assertOutsideCodeFolders(exportsDir, 'ERGANI_EXPORTS_DIR');
   const url = heartbeatUrlOf(env, 'ARCHIVE_HEARTBEAT_URL');
-  const clients = employer.branches.map((config) => new ErganiClient(config));
-  const noStandingSchedule = noStandingScheduleOf(env);
   const once = () => {
+    // Desktop settings can change between runs. A run already in progress finishes on its original clients.
+    const employer = loadEmployerConfig(env);
+    const clients = employer.branches.map((config) => new ErganiClient(config));
+    const noStandingSchedule = noStandingScheduleOf(env);
     markArchiveRun(store, Date.now());
     return runDailyArchive({
       // ⛔ Never creates the record: a missing one is this run's failure (`--init-store` creates it, once).
@@ -207,7 +209,7 @@ export async function runArchive(argv: readonly string[], env: NodeJS.ProcessEnv
   };
 
   if (values.once) return (await once()).kind === 'up' ? 0 : 1;
-  log(`archive — realm ${employer.erganiRealm}, ${clients.length} branch(es); daily at ${values.at} (Athens)`);
+  log(`archive — realm ${employer.erganiRealm}, ${employer.branches.length} branch(es); daily at ${values.at} (Athens)`);
   let due = dueAtStart(store, Date.now());
   if (!due) log('a run began less than a day ago — the next one at the daily time');
   for (;;) {

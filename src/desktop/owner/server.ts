@@ -138,7 +138,7 @@ export function createOwnerServer(o: OwnerOptions): Server {
       return send(res, 401, loginPage(note('bad', 'Λάθος κωδικός.')));
     }
     const token = cookieOf(req);
-    const csrf = sessions.touch(token);
+    const csrf = sessions.touch(token, state.ownerPassword);
     if (csrf === undefined) return redirect(res, '/login');
     if (method === 'POST' && !sameToken(form.get('csrf') ?? '', csrf)) return send(res, 403, 'Forbidden', 'text/plain; charset=utf-8');
     if (url.pathname === '/logout' && method === 'POST') {
