@@ -19,6 +19,7 @@ class Element_ {
   className = '';
   hidden = false;
   disabled = false;
+  value = '';
   listeners: Record<string, Array<(e: unknown) => void>> = {};
   constructor(public tag: string) {}
   append(...kids: unknown[]) {
@@ -30,6 +31,7 @@ class Element_ {
   }
   setAttribute(k: string, v: string) {
     this.attrs[k] = v;
+    if (k === 'value') this.value = v;
   }
   addEventListener(k: string, f: (e: unknown) => void) {
     (this.listeners[k] ??= []).push(f);
@@ -59,6 +61,10 @@ function bootPage(boardExtra: Record<string, unknown> = {}) {
   for (const id of ['label', 'clock', 'down', 'alerts', 'staff', 'flow', 'panel']) byId[id] = new Element_('div');
   const keys: Array<(e: { key: string }) => void> = [];
   const held: Held[] = [];
+  const timers = new Map<number, { f: () => void; ms: number }>();
+  let nextTimer = 1;
+  let hidden = false;
+  const visibility: Array<() => void> = [];
   const board = {
     now: 0,
     label: 'Δοκιμή',
@@ -79,15 +85,20 @@ function bootPage(boardExtra: Record<string, unknown> = {}) {
       createElement: (tag: string) => new Element_(tag),
       addEventListener: (type: string, f: (e: { key: string }) => void) => {
         if (type === 'keydown') keys.push(f);
+        if (type === 'visibilitychange') visibility.push(f as () => void);
       },
+      get hidden() { return hidden; },
       querySelector: () => null,
     },
     window: {},
     location: { reload: () => undefined },
     AbortSignal: { timeout: () => undefined },
-    // Short timers run (the PIN pad's repaint); the page's long ones (idle, result screens) are not this test's subject.
-    setTimeout: (f: () => void, ms: number) => (ms >= 1000 ? 0 : setTimeout(f, ms)),
-    clearTimeout: () => undefined,
+    // Short timers run (the PIN pad's repaint); long timers are held for explicit idle/privacy checks.
+    setTimeout: (f: () => void, ms: number) => {
+      if (ms < 1000) return setTimeout(f, ms);
+      const id = nextTimer++; timers.set(id, { f, ms }); return id;
+    },
+    clearTimeout: (id: number) => { timers.delete(id); },
     setInterval: () => 0,
     Date,
     Promise,
@@ -108,7 +119,10 @@ function bootPage(boardExtra: Record<string, unknown> = {}) {
   const heading = () => byId['panel']!.all().find((n) => n.tag === 'h2')?.textContent;
   const error = () => byId['panel']!.all().find((n) => n.className === 'error')?.textContent;
   const answer = (h: Held, data: unknown) => h.resolve({ status: 200, json: async () => data });
-  return { byId, held, settle, button, type, heading, error, answer };
+  return { byId, held, settle, button, type, heading, error, answer,
+    idle: () => { for (const t of [...timers.values()]) if (t.ms === 60000) t.f(); },
+    hide: () => { hidden = true; for (const f of visibility) f(); },
+  };
 }
 
 const session = (name: string, ticket: string) => ({ ok: true, ticket, mustChooseOwn: false, name, suggestion: '0', last: null });
@@ -345,4 +359,57 @@ it('reads the board again the moment the tab is shown', async () => {
   const before = page.reads.length;
   await page.show();
   expect(page.reads.length).toBe(before + 1);
+});
+
+
+const historyAnswer = {
+  name: 'Πρώτη', ticket: 'HISTORY-ONLY', from: '2026-10-01', to: '2026-10-26', more: false, before: null,
+  rows: [
+    { id: 1, day: '2026-10-26', at: 1793000000000, type: '0', branch: 'Δοκιμή', state: { kind: 'filed', protocol: 'ΔΟΚΙΜΗ-1', late: false } },
+    { id: 2, day: '2026-10-25', at: 1792900000000, type: '1', branch: '', state: { kind: 'needs-human' } },
+    { id: 3, day: '2026-10-24', at: 1792800000000, type: '0', branch: '', state: { kind: 'covered' } },
+    { id: 4, day: '2026-10-23', at: 1792700000000, type: '1', branch: '', state: { kind: 'sending-late' } },
+  ],
+};
+
+async function openHistory(page: ReturnType<typeof bootPage>) {
+  await page.settle();
+  page.button('Πρώτη').click();
+  page.type('2580');
+  page.answer(page.held[0]!, { ...session('Πρώτη', 'STAMP-TICKET'), historyRange: { from: '2026-10-01', to: '2026-10-26' } });
+  await page.settle();
+  // The new history path is offered only AFTER the existing own-PIN flow.
+  expect(page.button('Οι κινήσεις μου')).toBeDefined();
+  page.button('Οι κινήσεις μου').click();
+  expect(page.held[1]!.path).toBe('/api/history');
+}
+
+it('shows personal history as read-only filing results and closes and clears it on idle or hiding the tab', async () => {
+  for (const leave of ['idle', 'hide'] as const) {
+    const page = bootPage();
+    await openHistory(page);
+    page.answer(page.held[1]!, historyAnswer);
+    await page.settle();
+    const panel = page.byId['panel']!;
+    expect(panel.textContent).toContain('Οι κινήσεις μου');
+    expect(panel.textContent).toContain('ΔΟΚΙΜΗ-1');
+    expect(panel.textContent).toContain('Εκκρεμεί απόφαση');
+    expect(panel.textContent).toContain('Δεν στάλθηκε από εδώ');
+    expect(panel.textContent).toContain('Στέλνεται εκπρόθεσμα');
+    expect(panel.all().filter((n) => n.tag === 'button').some((n) => /ΕΝΑΡΞΗ|Επιβεβαίωση|Αποστολή εκπρόθεσμα/.test(n.textContent))).toBe(false);
+    page[leave]();
+    expect(page.byId['flow']!.hidden).toBe(true);
+    expect(panel.textContent).toBe('');
+  }
+});
+
+it('a history answer arriving after closing never appears for the next person', async () => {
+  const page = bootPage();
+  await openHistory(page);
+  page.button('Τέλος').click();
+  page.button('Δεύτερη').click();
+  page.answer(page.held[1]!, historyAnswer);
+  await page.settle();
+  expect(page.heading()).toBe('Δεύτερη');
+  expect(page.byId['panel']!.textContent).not.toContain('ΔΟΚΙΜΗ-1');
 });

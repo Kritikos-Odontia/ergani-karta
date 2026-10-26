@@ -2,7 +2,7 @@
 import { WORK_CARD_DELAY_REASON_LABELS } from '../ergani/types.js';
 import { rowToPunch } from './capture.js';
 import { attemptsOf, decisionsOf, stateOfPunch } from './outbox.js';
-import type { Person } from './staff.js';
+import { VerifiedPerson, type Person } from './staff.js';
 import type { StampStore } from './store.js';
 
 /**
@@ -67,6 +67,36 @@ export function historyOf(
       protocol,
     };
   });
+}
+
+/** The staff page gets only its reader's cards: no ΑΦΜ, ministry prose or other decision maker's name. */
+export function ownHistoryOf(
+  db: StampStore,
+  person: VerifiedPerson,
+  from: string,
+  to: string,
+  before: { at: number; id: number } | undefined,
+  nowMs: number,
+  branchName: (code: string) => string,
+) {
+  if (!VerifiedPerson.is(person)) throw new Error('history requires a checked PIN');
+  // A keyset cursor keeps equal-time cards distinct and avoids repeats when a new stamp arrives between pages.
+  const punches = db.prepare(`SELECT * FROM punches WHERE employee_id = ? AND reference_date BETWEEN ? AND ?
+    AND (? IS NULL OR event_ms < ? OR (event_ms = ? AND id < ?)) ORDER BY event_ms DESC, id DESC LIMIT 101`)
+    .all(person.employeeId, from, to, before?.at ?? null, before?.at ?? null, before?.at ?? null, before?.id ?? null)
+    .map(rowToPunch);
+  const page = punches.slice(0, 100);
+  const rows = page.map((p) => {
+    const state = stateOfPunch(db, p, nowMs);
+    return {
+      id: p.id, day: p.referenceDate, at: p.eventMs, type: p.fType, branch: branchName(p.branch),
+      state: state.kind === 'filed'
+        ? { kind: state.kind, protocol: state.protocol, late: state.late }
+        : { kind: state.kind },
+    };
+  });
+  const last = page.at(-1);
+  return { rows, more: punches.length > 100, before: last === undefined ? null : { at: last.eventMs, id: last.id } };
 }
 
 const escapeHtml = (text: string) => text.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);

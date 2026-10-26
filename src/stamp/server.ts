@@ -4,6 +4,8 @@ import { makerMark } from '../assets.js';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { z } from 'zod';
 import { CardEventType, WorkCardDelayReason } from '../ergani/types.js';
+import { athensTime } from './athens.js';
+import { ownHistoryOf } from './history.js';
 import { capturePunch, currentCardOf, lastPunchOf, suggestedType } from './capture.js';
 import { deviceByToken, redeemEnrollment, type Device } from './devices.js';
 import { withoutAfm } from './notify.js';
@@ -89,7 +91,7 @@ const MAX_BODY = 4_096;
 interface Ticket {
   person: VerifiedPerson;
   deviceId: number;
-  stage: 'choose' | 'stamp';
+  stage: 'choose' | 'stamp' | 'history';
   expiresMs: number;
   /** Her last card when the ticket was made — the one her screen shows and asks «again?» against. `null`: none yet. */
   lastPunchId: number | null;
@@ -97,6 +99,14 @@ interface Ticket {
 
 const PinBody = z.object({ employeeId: z.number().int().positive(), pin: z.string().max(8) });
 const OwnPinBody = z.object({ ticket: z.string().max(100), newPin: z.string().max(8) });
+const HistoryDay = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((day) => {
+  const ms = Date.parse(`${day}T00:00:00Z`);
+  return Number.isFinite(ms) && new Date(ms).toISOString().slice(0, 10) === day;
+});
+const HistoryBody = z.object({
+  ticket: z.string().max(100), from: HistoryDay, to: HistoryDay,
+  before: z.object({ at: z.number().int().safe().nonnegative(), id: z.number().int().safe().positive() }).optional(),
+}).refine((input) => input.from <= input.to);
 const StampBody = z.object({ ticket: z.string().max(100), type: CardEventType });
 const DecideBody = z.object({
   punchId: z.number().int().positive(),
@@ -174,6 +184,7 @@ export function createStampServer(options: StampServerOptions): Server {
       name: person.displayName,
       suggestion: suggestedType(db, person.employeeId, now()),
       last: last === undefined ? null : { type: last.fType, at: last.eventMs, referenceDate: last.referenceDate },
+      historyRange: { from: athensTime(now()).date.slice(0, 7) + '-01', to: athensTime(now()).date },
     };
   }
 
@@ -300,6 +311,19 @@ export function createStampServer(options: StampServerOptions): Server {
         throw new HttpError(422, { error: 'pin-refused', text: chosen.problem });
       }
       return sendJson(res, 200, afterPin(chosen.person, device, false));
+    }
+    if (path === '/api/history') {
+      const input = parse(HistoryBody, body);
+      // Identity comes only from a PIN-checked, device-bound ticket, never an employee id supplied by the browser.
+      // Reading consumes the stamp capability; later pages carry a history-only ticket and cannot create a card.
+      const stage = tickets.get(input.ticket)?.stage === 'history' ? 'history' : 'stamp';
+      const ticket = takeTicket(input.ticket, device, stage);
+      const history = ownHistoryOf(db, ticket.person, input.from, input.to, input.before, now(),
+        (code) => options.branches.length > 1 ? options.branches.find((b) => b.code === code)?.heading ?? code : '');
+      return sendJson(res, 200, {
+        ...history, name: ticket.person.displayName, from: input.from, to: input.to,
+        ticket: newTicket(ticket.person, device.id, 'history', null),
+      });
     }
     if (path === '/api/stamp') {
       const input = parse(StampBody, body);

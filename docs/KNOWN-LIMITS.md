@@ -38,15 +38,28 @@ split day there — ΕΝΑΡΞΗ 09:00, the 14:00 ΛΗΞΗ forgotten, ΕΝΑΡΞ
 holds 09:00–21:00. The other way round, a person working past 21:00 there is named as «not stamped out» while still at
 work. A branch that reads its schedule catches both at the interval's end + 30′.
 
-## Late sends and a slow ΕΡΓΑΝΗ
+## An ΕΡΓΑΝΗ request already in flight still takes time
 
-The outbox sends cards one after another, oldest first, across all branches. After an outage, if several cards were
-approved for late sending and ΕΡΓΑΝΗ is slow (a try can take minutes: timeouts and «too many requests» waits), a card
-stamped then waits behind them and may get only one or two tries before its 15 minutes run out; it then goes to the
-late-send list like any card that did not get through. A fix must keep one person's cards in order (see «The clock-out
-is never delayed», docs/DECISIONS.md) — for example, late sends limited to one per pass, never ahead of an earlier card
-of the same person and day. A «fresh cards first» order was tried and dropped: it made a ΛΗΞΗ overtake its own day's
-late ΕΝΑΡΞΗ more often.
+Fresh cards are reconsidered after every send and go ahead of unrelated late cards. The late backlog gets one card
+per pass; earlier due cards of the same person and working day still go first, across branches. A failed ΕΝΑΡΞΗ's
+retry gap never holds back a fresh ΛΗΞΗ (docs/DECISIONS.md).
+
+A send already in flight is allowed to finish: stopping it cannot undo what ΕΡΓΑΝΗ may have received. Requests time
+out after 20 seconds each, but sign-in, token renewal and «too many requests» waits can make an attempt take minutes.
+A fresh stamp can still wait for that one attempt, and an ΕΡΓΑΝΗ that remains unavailable can still outlast its window.
+No filing is promised: the page keeps the result and sends an unconfirmed card to the human queue at minute 14.
+
+## Personal history shows this application's local record
+
+After choosing their own PIN, active staff who stamp can read their own cards on the staff page, at every branch.
+The view starts with the current month and shows the newest 100 cards of the chosen working-day range; «Παλαιότερες
+κινήσεις» reads the next page. It is a snapshot: «Εμφάνιση» reads the current filing results again. It does not read
+back today's ministry register or confirm cards filed through CardScanner or by the accountant. «Καλύφθηκε» in the
+owner's record is not a ministry receipt.
+
+The screen clears after one minute without interaction, when the tab is hidden, or at «Τέλος». Reading again or
+stamping afterwards needs the PIN again. It is still a shared screen: someone looking over the reader's shoulder can
+see it. A deactivated or exempt person's record remains available through the owner's individual export (docs/ADMIN.md).
 
 ## The first real answers come from one employer's account
 
