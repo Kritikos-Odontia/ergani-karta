@@ -24,16 +24,19 @@ older paragraph disagree). Until it is measured, rule 3's bound stands (docs/RUL
 exactly the missed card that could turn a split day into one long one — which is why the «forgot to stamp» alarms check
 each declared interval on its own.
 
-## Who is due today comes from last month's schedule
+## Without a calendar entry, who is due today comes from last month's schedule
 
 ΕΡΓΑΝΗ answers schedule reads a month late, so the alarms take the same weekday in the latest week it answers. On an
 ordinary day of a fixed weekly pattern that is right. It is wrong, and says «check», when: a person is back from
-leave since then (missed), a person is newly on leave (a false alarm), a public holiday is not marked closed
-(`admin quiet`), or the accountant re-declared the schedule afterwards (not seen).
+leave since then (missed), a person is newly on leave (a false alarm), or the accountant re-declared the schedule
+afterwards (not seen). The owner's reminder calendar can mark leave, replacement hours and closed/open dates; national
+holidays are built in. These entries affect reminders only, never file a schedule, and do not replace the accountant's
+declarations. Transfers of May Day and local or exceptional holidays need an owner entry after checking with the
+accountant; they are not fetched automatically. See [ACCOUNTANT-CALENDAR.md](ACCOUNTANT-CALENDAR.md).
 
-## A branch with no schedule cannot see a forgotten midday ΛΗΞΗ
+## A branch with no schedule or calendar hours cannot see a forgotten midday ΛΗΞΗ
 
-On a branch that reads no schedule (`SCHEDULE=none`), «forgot ΛΗΞΗ» fires only for a stint still open at 21:00. A
+On a branch that reads no schedule (`SCHEDULE=none`) and has no replacement hours in the reminder calendar, «forgot ΛΗΞΗ» fires only for a stint still open at 21:00. A
 split day there — ΕΝΑΡΞΗ 09:00, the 14:00 ΛΗΞΗ forgotten, ΕΝΑΡΞΗ 17:00, ΛΗΞΗ 21:00 — raises no alarm, and ΕΡΓΑΝΗ
 holds 09:00–21:00. The other way round, a person working past 21:00 there is named as «not stamped out» while still at
 work. A branch that reads its schedule catches both at the interval's end + 30′.
@@ -124,3 +127,11 @@ with it.
 - **No paid code signing.** Windows and macOS warn on the first install (docs/INSTALL-DESKTOP.md shows the clicks). The
   updates are signed with the project's own key and verified by the program; that signature, not the operating system's,
   is what protects an installed copy.
+
+## The accountant export separates local cards from saved ministry read-back
+
+A submission protocol and a ministry read-back interval are different evidence. The accountant ZIP labels every row
+and keeps those two sources separate; it does not automatically match them or decide payroll. It reads saved records
+only, without refreshing ΕΡΓΑΝΗ. A day without a successful saved read is unknown; a card marked covered elsewhere
+still needs that coverage checked. Proof PDFs not yet obtained are identified rather than invented. The ZIP holds
+staff identifiers and hours and is not encrypted. Large periods use memory; prefer one month at a time.
