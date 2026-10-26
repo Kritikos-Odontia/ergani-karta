@@ -10,7 +10,6 @@ import { heartbeatSender } from '../src/heartbeat.js';
 import { dueAtStart, markArchiveRun, noStandingScheduleOf } from '../src/records/cli.js';
 import { REREAD_DAYS, monthsBefore, nextRunAfter, runDailyArchive, type DailyOptions } from '../src/records/daily.js';
 import { readArchiveStatus, recordArchiveStatus } from '../src/records/status.js';
-import { archiveOverview } from '../src/desktop/owner/archive.js';
 import { RealmMismatchError } from '../src/records/pull.js';
 import { EmployerMismatchError, openRecordStore, pullLog } from '../src/records/store.js';
 import { athensInstant } from '../src/stamp/athens.js';
@@ -144,16 +143,6 @@ describe('the daily archive run', () => {
     expect(readArchiveStatus(t.store)?.lastGood).toBeUndefined();
     await runDailyArchive(t.options({ status, exportsDir: join(fileURLToPath(new URL('../', import.meta.url)), 'must-not-write') }));
     expect(readArchiveStatus(t.store)).toMatchObject({ kind: 'failed', pages: ['2026-05', '2026-06', '2026-07', '2026-08', '2026-09'] });
-  });
-
-  it('keeps never-read months visible after they leave the readable window, and shows a runtime failure when status cannot be saved', async () => {
-    const t = install(['0', '1']);
-    recordArchiveStatus(t.store, { kind: 'up' }, t.options().now());
-    const overview = String(archiveOverview(t.store, '2026-04', ['0', '1'], t.options().now(), true));
-    expect(overview).toContain('2026-04 — παράρτημα 0');
-    expect(overview).toContain('2026-04 — παράρτημα 1');
-    expect(overview).toContain('Ο τελευταίος έλεγχος του μηνιαίου αρχείου απέτυχε');
-    expect(overview).toContain('Τελευταίο πλήρες μηνιαίο αρχείο');
   });
 
   it('an archive that cannot even start retains the previously incomplete months and pages until a successful run', async () => {

@@ -226,7 +226,7 @@ describe('ergani desktop — from an empty folder to a working page', () => {
     recordArchiveStatus(join(data, 'records', 'records.sqlite'), { kind: 'failed', incomplete: [{ month: '2026-09', branch: '0' }], pages: ['2026-09'] }, Date.now());
     const archiveHome = await (await get('/', { cookie })).text();
     expect(archiveHome).toContain('Τελευταίο πλήρες μηνιαίο αρχείο');
-    expect(archiveHome).toContain('2026-09 — παράρτημα 0');
+    expect(archiveHome).toContain('2026-09 — Οδοντιατρείο Δοκιμής');
     expect(archiveHome).toContain('Σελίδες που δεν γράφτηκαν: 2026-09');
     expect(archiveHome).toContain('Ο τελευταίος έλεγχος του μηνιαίου αρχείου απέτυχε');
 

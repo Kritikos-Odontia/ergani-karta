@@ -1,13 +1,17 @@
 // SPDX-License-Identifier: EUPL-1.2
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ownerPages } from '../src/desktop/owner/pages.js';
+import { readOverviewMaintenance } from '../src/desktop/owner/overview-maintenance.js';
+import { backupAndRecord } from '../src/desktop/backup.js';
+import { hashPassword } from '../src/desktop/owner/auth.js';
 import { desktopPaths } from '../src/desktop/paths.js';
 import { readDesktopState, writeDesktopState } from '../src/desktop/state.js';
 import { ENARXI, LIXI } from '../src/ergani/types.js';
 import { claimRecordStore, openRecordStore } from '../src/records/store.js';
+import { recordArchiveStatus } from '../src/records/status.js';
 import { athensInstant } from '../src/stamp/athens.js';
 import { capturePunch } from '../src/stamp/capture.js';
 import { decide } from '../src/stamp/outbox.js';
@@ -47,7 +51,9 @@ function installation(at = athensInstant('2026-10-26', '10:00'), baseUrl = 'http
   };
   let clock = at;
   let silent: number | undefined;
-  const pages = ownerPages({ paths, env, now: () => clock, log: () => undefined, erganiSilentSince: () => silent, openFolders: false });
+  let archiveFailed = false;
+  const maintenance = () => readOverviewMaintenance({ paths, nowMs: clock, archiveFrom: env.ARCHIVE_FROM, branches: ['0', '1'], employerAfm: AFM.employer, realm: 'local', archiveFailed });
+  const pages = ownerPages({ paths, env, now: () => clock, log: () => undefined, erganiSilentSince: () => silent, archiveFailed: () => archiveFailed, openFolders: false });
   const render = async (path = '/') => {
     const handler = pages.get(path);
     if (handler === undefined) throw new Error(`missing page ${path}`);
@@ -55,7 +61,7 @@ function installation(at = athensInstant('2026-10-26', '10:00'), baseUrl = 'http
     if (!('body' in response)) throw new Error('unexpected redirect');
     return response.body;
   };
-  return { paths, db, records, render, pages, setClock: (t: number) => { clock = t; }, setSilent: (t: number | undefined) => { silent = t; } };
+  return { paths, db, records, env, render, pages, maintenance, setClock: (t: number) => { clock = t; }, setSilent: (t: number | undefined) => { silent = t; }, setArchiveFailed: (failed: boolean) => { archiveFailed = failed; } };
 }
 
 async function verified(db: StampStore, person = ALFA): Promise<VerifiedPerson> {
@@ -80,6 +86,51 @@ function pull(records: StampStore, month: string, branch: string, outcome: 'comp
 }
 
 describe('the owner’s first screen', () => {
+  it('reads ready’s complete backup outcomes through the maintenance seam on each refresh', async () => {
+    const t = installation();
+    writeDesktopState(t.paths.desktop, { ...readDesktopState(t.paths.desktop)!, ownerPassword: hashPassword('a long owner password') });
+    writeFileSync(t.paths.settings, 'ERGANI_BRANCH_0_PASSWORD=Fixture.p1\n', { mode: 0o600 });
+    const stick = join(t.paths.root, 'usb');
+    mkdirSync(stick);
+    writeDesktopState(t.paths.desktop, { ...readDesktopState(t.paths.desktop)!, backupFolder: stick });
+    const at = athensInstant('2026-10-26', '10:00');
+    expect(backupAndRecord(t.paths, at, () => undefined).ok).toBe(true);
+    expect(t.maintenance().backup).toEqual({ atIso: new Date(at).toISOString(), ok: true });
+    expect(await t.render()).toContain('Τελευταίο αντίγραφο:');
+    renameSync(stick, stick + '-unplugged');
+    expect(backupAndRecord(t.paths, at + 1, () => undefined).ok).toBe(false);
+    expect(t.maintenance().backup?.ok).toBe(false);
+    expect(await t.render()).toMatch(/Το τελευταίο αντίγραφο απέτυχε[\s\S]*USB/);
+  });
+
+  it('joins daily archive status through the seam: a later failed run and page failure cannot hide its last good run', async () => {
+    const t = installation();
+    pull(t.records, '2026-09', '0', 'complete', '2026-10-26T07:00:00Z');
+    recordArchiveStatus(t.paths.recordsDb, { kind: 'up' }, Date.parse('2026-10-24T01:15:00Z'));
+    recordArchiveStatus(t.paths.recordsDb, { kind: 'failed', incomplete: [{ month: '2026-09', branch: '1' }], pages: ['2026-09'] }, Date.parse('2026-10-26T07:00:00Z'));
+    expect(t.maintenance().archive.run).toMatchObject({ kind: 'failed', lastGood: '2026-10-24T01:15:00.000Z', pages: ['2026-09'] });
+    const home = await t.render();
+    for (const id of ['submissions', 'proofs', 'connection', 'backup', 'archive']) expect(home).toContain(`id="${id}"`);
+    expect(home).toContain('Τελευταίο πλήρες μηνιαίο αρχείο');
+    expect(home).toContain('πάνω από 36 ώρες');
+    expect(home).toContain('Ο τελευταίος έλεγχος του μηνιαίου αρχείου απέτυχε');
+    expect(home).toContain('Σελίδες που δεν γράφτηκαν: 2026-09');
+    expect(home).toContain('2026-09 — Οδοντιατρείο Δοκιμής — Δεύτερο');
+    expect(home).not.toContain('Δεν υπάρχει ακόμη εδώ αποτέλεσμα ολόκληρης');
+  });
+
+  it('keeps expired archive gaps visible and shows a runtime failure when its durable status cannot be saved', async () => {
+    const t = installation();
+    t.env.ARCHIVE_FROM = '2026-04';
+    recordArchiveStatus(t.paths.recordsDb, { kind: 'up' }, athensInstant('2026-10-26', '03:15'));
+    t.setArchiveFailed(true);
+    const home = await t.render();
+    expect(home).toContain('2026-04 — Οδοντιατρείο Δοκιμής — Έδρα');
+    expect(home).toContain('2026-04 — Οδοντιατρείο Δοκιμής — Δεύτερο');
+    expect(home).toContain('Ο τελευταίος έλεγχος του μηνιαίου αρχείου απέτυχε');
+    expect(home).toContain('Τελευταίο πλήρες μηνιαίο αρχείο');
+  });
+
   it('shows all five status areas and their next action without making any network request', async () => {
     // A missing area, or a GET that starts the connection check, breaks this first-screen contract.
     const fake = await startErganiFake({ employerAfm: AFM.employer });

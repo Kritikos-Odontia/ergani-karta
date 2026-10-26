@@ -2,14 +2,7 @@
 
 What is known and not fixed, and why. Stated once, as fact. An entry is removed when it is fixed.
 
-## The owner overview currently reads individual archive pulls
-
-The desktop Home page reads the latest backup attempt from `desktop.json` and the monthly pulls from the local record.
-Until the readiness work's persisted daily status is joined, its last complete archive read proves one branch/month,
-not a successful whole daily archive run or comparison-page writes. Failed or absent latest reads in the current
-one-to-five-month archive window are listed by month and branch. A newer failed read does not hide the last complete
-one. Failures before a pull is recorded, and failed comparison-page writes, cannot be inferred from these pulls; the
-screen says so. The reader is isolated in `src/desktop/owner/overview-maintenance.ts` for that integration.
+## The owner overview is a local snapshot
 
 The overview is a snapshot, refreshed by reloading the page. Its connection monitor detects ten minutes without an
 HTTP answer, including the initial observation period after startup; absence of that alarm is not proof of a working
