@@ -21,7 +21,7 @@ The read-only review of already-held records on 26 October 2026 found no split-s
 
 ## Overnight ministry read-back remains unconfirmed
 
-The same stored-record review found no overnight exit. The program preserves a post-midnight exit's original working day, including across branches, and fabricated tests cover it. No observed overnight monthly answer confirms the ministry's date, time or overnight-flag shape yet; an unrecognised answer is refused, never recorded as an empty day.
+The same stored-record review found no overnight exit. A departure closing yesterday's open arrival retains its working day before 06:00, or through the exact ending instant of a current overnight calendar interval covering departure for that employee, day and arrival branch. The departure can be at another branch. Without a covering calendar interval, from 06:00 it belongs to the new day and the page suggests arrival; month-late imported hours do not extend that safeguard. Fabricated tests cover these boundaries. No observed overnight monthly answer confirms the ministry's date, time or overnight-flag shape yet; an unrecognised answer is refused, never recorded as an empty day.
 
 ## Without a calendar entry, who is due today comes from last month's schedule
 
@@ -29,7 +29,7 @@ The same stored-record review found no overnight exit. The program preserves a p
 ordinary day of a fixed weekly pattern that is right. It is wrong, and says «check», when: a person is back from
 leave since then (missed), a person is newly on leave (a false alarm), or the accountant re-declared the schedule
 afterwards (not seen). The owner's reminder calendar can mark leave, replacement hours and closed/open dates; national
-holidays are built in. These entries affect reminders only, never file a schedule, and do not replace the accountant's
+holidays are built in. These entries affect reminders and identify a covered overnight departure's working day, never file a schedule, and do not replace the accountant's
 declarations. Transfers of May Day and local or exceptional holidays need an owner entry after checking with the
 accountant; they are not fetched automatically. See [ACCOUNTANT-CALENDAR.md](ACCOUNTANT-CALENDAR.md).
 

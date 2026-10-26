@@ -2,15 +2,17 @@
 
 On the installation computer sign in with the owner password and open **Ημερολόγιο (Calendar)**.
 
-> **The calendar changes reminders only. It files no schedule or leave declaration to ΕΡΓΑΝΗ. Those declarations remain with the accountant.**
+> **The calendar changes reminders and helps identify an overnight departure's working day. It files no schedule or leave declaration to ΕΡΓΑΝΗ. Those declarations remain with the accountant.**
 
 ## Leave, replacement hours and withdrawal
 
 - **Leave:** choose an employee, day or range, **Όλα (All)** branches and a short reason without health details. Select **Άδεια (Leave)**. Arrival reminders stop for that employee across branches.
-- **Replacement hours:** choose an employee, one branch, period and hours such as `09:00-13:00,17:00-21:00`. Select **Αλλαγή ωρών (Change hours)**. These replace the previous reminder expectations, including where ministry schedule reading is disabled. The final interval can end after midnight, for example `22:00-02:00`; the departure retains its working day.
+- **Replacement hours:** choose an employee, one branch, period and hours such as `09:00-13:00,17:00-21:00`. Select **Αλλαγή ωρών (Change hours)**. These replace the previous reminder expectations, including where ministry schedule reading is disabled. The final interval can end after midnight, for example `22:00-08:00`.
 - **Withdraw:** select the same period and **All** for leave, or the same branch for replacement hours, then **Άρση για την επιλογή (Withdraw for selection)**. Normal expectations resume.
 
 Leave overrides replacement hours. Entries and withdrawals remain as separate facts; older cards do not change.
+
+For an open arrival from the previous day, the page suggests departure and records it under the arrival's day while the recorded overnight interval covers it, including the exact ending time. It uses the current hours for that employee, day and arrival branch; departure may be at another branch. With `22:00-08:00`, departure at 08:00 the next day belongs to the previous day. Without a recorded interval covering departure, the previous day is recognised only before 06:00; from 06:00 the page suggests arrival and a departure belongs to the new day. The older schedule read from ΕΡΓΑΝΗ does not extend this boundary.
 
 ## Closed or open day
 

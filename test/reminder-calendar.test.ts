@@ -8,7 +8,8 @@ import { desktopPaths } from '../src/desktop/paths.js';
 import { forgotAlarms, cardAlarms } from '../src/stamp/alarms.js';
 import { orthodoxEaster } from '../src/stamp/holidays.js';
 import { addDays, athensInstant } from '../src/stamp/athens.js';
-import { capturePunch } from '../src/stamp/capture.js';
+import { capturePunch, currentCardOf, suggestedType } from '../src/stamp/capture.js';
+import { submissionFor } from '../src/stamp/outbox.js';
 import { checkPin, chooseOwnPin } from '../src/stamp/staff.js';
 import { initStampStore, type StampStore } from '../src/stamp/store.js';
 import { ALFA, VITA, AFM } from './fixtures/people.js';
@@ -123,4 +124,36 @@ it('reminds about the end of an owner-marked overnight shift after midnight, on 
   expect(forgotAlarms(db, athensInstant(day, '23:00'), 'Δοκιμή', [branches[0]!]).some((l) => l.key.startsWith('no-end:'))).toBe(false);
   const afterMidnight = forgotAlarms(db, athensInstant('2026-10-06', '02:31'), 'Δοκιμή', [branches[0]!]);
   expect(afterMidnight.some((l) => l.key.startsWith(`no-end:${people[0]!.employeeId}:${day}:0:`))).toBe(true);
+});
+
+it.each(['06:00', '07:59:59', '08:00'])('keeps a recorded 22:00–08:00 shift open at %s and files its departure on the starting day across branches', async (time) => {
+  const { db, day, people, devices, post } = await setup('2026-10-26');
+  const who = people[0]!;
+  await post({ do: 'hours', employee: String(who.employeeId), branch: '0', from: day, to: day, hours: '22:00-08:00', reason: 'Νυχτερινή αλλαγή' });
+  const arrival = capturePunch(db, who, '0', devices[0]!, athensInstant(day, '22:00'));
+  const departureMs = athensInstant('2026-10-27', time);
+  // Removing the calendar exception must break both the page suggestion and the actual filing date.
+  expect.soft(suggestedType(db, who.employeeId, departureMs)).toBe('1');
+  expect.soft(currentCardOf(db, who.employeeId, departureMs)).toEqual(arrival);
+  const departure = capturePunch(db, who, '1', devices[1]!, departureMs);
+  expect.soft(departure.referenceDate).toBe('2026-10-26');
+  const card = submissionFor(departure, AFM.employer, '').Cards.Card[0]!;
+  expect(card.f_aa).toBe('1');
+  expect(card.Details.CardDetails[0]!.f_reference_date).toBe('2026-10-26');
+});
+
+it.each(['after end', 'other person', 'other branch', 'other day', 'daytime hours', 'withdrawn', 'leave', 'replaced'])('does not extend yesterday’s shift for %s', async (scenario) => {
+  const { db, day, people, devices, post } = await setup('2026-10-26');
+  const who = people[0]!;
+  const markedDay = scenario === 'other day' ? '2026-10-25' : day;
+  const fields = { employee: String(people[scenario === 'other person' ? 1 : 0]!.employeeId), branch: scenario === 'other branch' ? '1' : '0', from: markedDay, to: markedDay, reason: 'Δοκιμή' };
+  await post({ ...fields, do: 'hours', hours: scenario === 'daytime hours' ? '09:00-17:00' : '22:00-08:00' });
+  if (scenario === 'withdrawn') await post({ ...fields, do: 'reset' });
+  if (scenario === 'leave') await post({ ...fields, do: 'leave', branch: '' });
+  if (scenario === 'replaced') await post({ ...fields, do: 'hours', hours: '09:00-17:00' });
+  capturePunch(db, who, '0', devices[0]!, athensInstant(day, '22:00'));
+  const departureMs = athensInstant('2026-10-27', scenario === 'after end' ? '08:00:01' : '08:00');
+  expect(suggestedType(db, who.employeeId, departureMs)).toBe('0');
+  expect(currentCardOf(db, who.employeeId, departureMs)).toBeUndefined();
+  expect(capturePunch(db, who, '1', devices[0]!, departureMs).referenceDate).toBe('2026-10-27');
 });

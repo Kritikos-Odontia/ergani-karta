@@ -22,7 +22,7 @@ On the installation computer sign in as owner and open **Για τον λογι�
 
 A **local record** remains local even with a protocol: the protocol confirms submission, not an automatic match with a monthly interval. **Confirmed by the latest ΕΡΓΑΝΗ read** means that interval appeared in the latest successful saved answer for that day/branch. Older versions remain labelled “no longer returned”.
 
-The export reads the two local stores without a fresh ministry call. If the monthly store is absent it exports local cards with an explicit note. **A day without a successful read remains unknown**, not a day without work. The period uses working days, keeping an overnight departure with its arrival. Trial rows are marked as trial.
+The export reads the two local stores without a fresh ministry call. If the monthly store is absent it exports local cards with an explicit note. **A day without a successful read remains unknown**, not a day without work. The period uses the working day saved on each card; overnight departures follow the [calendar's boundaries](reminder-calendar.md). Trial rows are marked as trial.
 
 ## Open in a spreadsheet
 

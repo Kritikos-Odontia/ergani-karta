@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 import { ENARXI, LIXI, type CardEventType } from '../ergani/types.js';
-import { addDays, athensTime, cardDateTime } from './athens.js';
+import { addDays, athensInstant, athensTime, cardDateTime } from './athens.js';
+import { reminderDay } from './calendar.js';
 import type { Device } from './devices.js';
 import { VerifiedPerson } from './staff.js';
 import { isoOf, type StampStore } from './store.js';
@@ -23,7 +24,9 @@ import { isoOf, type StampStore } from './store.js';
  * A ΛΗΞΗ belongs to the working day of the person's open ΕΝΑΡΞΗ — so a shift that ends after midnight is not filed
  * against the wrong day (f_reference_date, types.ts). ⭐ Her open ΕΝΑΡΞΗ AT ANY BRANCH: the store holds every branch of
  * the employer, so an ΕΝΑΡΞΗ at one and the ΛΗΞΗ at another keep one working day. An ΕΝΑΡΞΗ is open if it was made TODAY (Athens), or yesterday
- * when it is now before this hour. ⚠ Never «within so many hours»: after a split shift whose 21:00 ΛΗΞΗ was forgotten,
+ * when it is now before this hour, or her recorded overnight calendar interval at the arrival's branch still covers
+ * the departure. Only the calendar's current hours extend this boundary, not the month-late imported schedule.
+ * ⚠ Never «within so many hours»: after a split shift whose 21:00 ΛΗΞΗ was forgotten,
  * the 17:00 ΕΝΑΡΞΗ is 16 hours old at 09:00 the next morning, and a window long enough for a night shift would offer
  * her ΛΗΞΗ and file it on yesterday — a false 16-hour shift on the register, which cannot be withdrawn.
  */
@@ -66,13 +69,19 @@ export function lastPunchOf(db: StampStore, employeeId: number): Punch | undefin
   return r === undefined ? undefined : rowToPunch(r);
 }
 
-/** An ΕΝΑΡΞΗ with no ΛΗΞΗ after it yet, on today's working day (or yesterday's, in the small hours) — the shift a ΛΗΞΗ now would close. */
+/** An ΕΝΑΡΞΗ with no ΛΗΞΗ after it yet, today or on yesterday's supported overnight shift — the shift a ΛΗΞΗ now would close. */
 export function openShiftOf(db: StampStore, employeeId: number, nowMs: number): Punch | undefined {
   const last = lastPunchOf(db, employeeId);
   if (last === undefined || last.fType !== ENARXI) return undefined;
   const t = athensTime(nowMs);
   if (last.referenceDate === t.date) return last;
-  if (last.referenceDate === addDays(t.date, -1) && t.time < AFTER_MIDNIGHT_UNTIL) return last;
+  if (last.referenceDate === addDays(t.date, -1)) {
+    if (t.time < AFTER_MIDNIGHT_UNTIL) return last;
+    const recorded = reminderDay(db, last.referenceDate, employeeId, last.branch);
+    // A known overnight end may be later than 06:00. Include the ending instant, but never borrow another person's,
+    // day's or branch's hours to turn an unrelated next-morning departure into yesterday's shift.
+    if (recorded.intervals?.some((iv) => iv.end < iv.start && nowMs <= athensInstant(t.date, iv.end))) return last;
+  }
   return undefined;
 }
 

@@ -20,7 +20,7 @@ The program does not do payroll, hiring, dismissal or schedule filings. The acco
 - **Monthly archive:** ΕΡΓΑΝΗ answers one month behind. An unknown response shape is refused and shown as a problem, not as “no movements”. Findings come from a limited set of accounts.
 - **Computer, power or network failure:** the page may be unavailable. Use [CardScanner only when the page cannot capture a card](daily.md).
 - **Recovery:** needs a complete backup and the owner password used then. The program does not encrypt record files/exports. Later changes are absent; the [recovery check](new-computer.md) is required before sending resumes.
-- **Overnight work:** the shape of a monthly ministry response for a post-midnight departure remains unconfirmed. The program preserves the original working day locally; an unknown answer is refused rather than treated as an empty day.
+- **Overnight work:** a departure closing the previous day's open arrival retains that day before 06:00, or while a current overnight interval in the [calendar](reminder-calendar.md) for that employee, day and arrival branch covers it, including its ending time. Otherwise it belongs to the new day. The shape of a monthly ministry response for an overnight departure remains unconfirmed; an unknown answer is refused rather than treated as an empty day.
 - **Retiring a branch:** its record and restricted login remain for pending submissions, receipts and archive reads. There is no reactivation screen, and retiring it here does not close it at ΕΡΓΑΝΗ.
 
 Detailed technical limits are kept in [KNOWN-LIMITS.md](../../KNOWN-LIMITS.md) (English).
