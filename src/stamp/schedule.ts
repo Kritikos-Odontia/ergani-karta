@@ -2,6 +2,8 @@
 import { readSchedule, type ReadClient } from '../ergani/exbase.js';
 import type { ScheduleRow } from '../ergani/types.js';
 import { addDays, athensTime } from './athens.js';
+import { nationalHoliday } from './holidays.js';
+import { daysBetween } from '../export/model.js';
 import { isoOf, type StampStore } from './store.js';
 
 /**
@@ -151,12 +153,12 @@ export function declaredDays(rows: readonly ScheduleRow[]): DeclaredDay[] {
 /** Is `day` marked closed? The latest mark for the day decides: a mark can be withdrawn (`markQuietDay(…, false)`). */
 export function isQuietDay(db: StampStore, day: string): boolean {
   const row = db.prepare('SELECT quiet FROM quiet_days WHERE day = ? ORDER BY id DESC LIMIT 1').get(day);
-  return row?.['quiet'] === 1;
+  return row === undefined ? nationalHoliday(day) !== undefined : row['quiet'] === 1;
 }
 
 /** Mark a day closed (`quiet` true) or withdraw that mark (false). Append-only: every mark and withdrawal is kept. */
 export function markQuietDay(db: StampStore, day: string, quiet: boolean, reason: string, by: string, nowMs: number): void {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) throw new Error('--date is YYYY-MM-DD');
+  daysBetween(day, day);
   if (reason.trim() === '') throw new Error('give the reason');
   db.prepare('INSERT INTO quiet_days (day, quiet, reason, by, at) VALUES (?, ?, ?, ?, ?)').run(
     day,
