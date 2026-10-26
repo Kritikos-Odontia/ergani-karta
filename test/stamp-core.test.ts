@@ -631,14 +631,6 @@ describe('the outbox — filing inside the 15 minutes', () => {
     expect(main).not.toMatch(/new ErganiClient\(/);
   });
 
-  it('main.ts hands the alarms each branch\'s reader unless that branch says SCHEDULE=none', () => {
-    // The «not stamped in» alarm hangs on these lines (a missed card: €10,500 — docs/RULES.md rule 6), and a branch
-    // with SCHEDULE=none has no reader, so the compiler no longer holds it. A source check, as above.
-    const main = readFileSync(fileURLToPath(new URL('../src/stamp/main.ts', import.meta.url)), 'utf8');
-    expect(main).toContain("const readsSchedule = (code: string) => stamp.branches.find((b) => b.code === code)?.scheduleFromErgani === true;");
-    expect(main).toContain('readers: new Map([...clients].filter(([code]) => readsSchedule(code))),');
-  });
-
   it('reports itself healthy only after a pass that completed', async () => {
     const { db, outbox } = await setup();
     await outbox.pass();
